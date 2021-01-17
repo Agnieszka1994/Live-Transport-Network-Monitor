@@ -6,6 +6,8 @@
 #include <iostream>
 #include <string>
 
+#include "WebsocketClient.h"
+
 using tcp = boost::asio::ip::tcp;
 namespace websocket = boost::beast::websocket;
 
@@ -115,6 +117,7 @@ void OnResolve(
     tcp::resolver::iterator endpoint
 )
 {
+
     if(ec){
         Log("OnResolve", ec);
         return;
