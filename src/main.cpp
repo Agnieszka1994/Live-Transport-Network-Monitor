@@ -17,6 +17,48 @@ void Log(const std::string& where, boost::system::error_code ec)
               << std::endl;
 }
 
+void OnReceive(
+    // Start of shared data
+    boost::beast::flat_buffer& rBuffer,
+    // End of shared data
+    const boost::system::error_code& ec
+)
+{
+    if(ec){
+        Log("OnReceive", ec);
+        return;
+    }
+
+    // Print the echoed message
+
+    std::cout << "ECHO: "
+                << boost::beast::make_printable(rBuffer.data())
+                << std::endl;
+}
+
+void OnSend(
+    // Start of shared data
+    websocket::stream<boost::beast::tcp_stream>& ws,
+    boost::beast::flat_buffer& rBuffer,
+    // End of shared data
+    const boost::system::error_code& ec
+)
+{
+    if(ec){
+        Log("OnSend", ec);
+        return;
+    }
+    // Read the echoed message back
+    ws.async_read(rBuffer,
+        [&rBuffer](auto ec, auto nBytesRead){
+            OnReceive(rBuffer, ec);
+        }
+    );
+}
+void callback(const boost::system::error_code& error)
+{
+    Log(std::string(), error);
+};
 int main()
 {
     // Connection targets
@@ -42,7 +84,7 @@ int main()
     // Connect the TCP socket.
     tcp::socket socket {ioc};
 
-    socket.connect(*endpoint, ec);
+    socket.async_connect(*endpoint, callback);
     if (ec) {
         Log("socket.connect", ec);
         return -2;
@@ -70,7 +112,7 @@ int main()
 
     // Read the echoed message back.
     boost::beast::flat_buffer rbuffer {};
-    
+
     ws.read(rbuffer, ec);
     if (ec) {
         Log("ws.read", ec);
