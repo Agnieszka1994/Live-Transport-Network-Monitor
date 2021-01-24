@@ -158,7 +158,7 @@ void WebsocketClient::OnHandshake(
 
     // Dispathc the user callback
     // This call is synchronous and will block the Websocket strand
-    if(onConncet_) {
+    if(onConnect_) {
         onConnect_(ec);
     }
 }
@@ -170,7 +170,7 @@ void WebsocketClient::ListenToIncomingMessage(
     // Stop processing messages if the connection has been aborted 
     if(ec == boost::asio::error::operation_aborted){
         if(onDisconnect_) {
-            inDisconnect_(ec);
+            onDisconnect_(ec);
         }
         return;
     }
@@ -180,7 +180,7 @@ void WebsocketClient::ListenToIncomingMessage(
     ws_.async_read(rBuffer_,
         [this](auto ec, auto nBytes) {
             OnRead(ec, nBytes);
-            ListenToIncomingMessage();
+            ListenToIncomingMessage(ec);
         }
     );
 }
