@@ -44,7 +44,17 @@ void WebSocketClient::Connect(
 )
 {
     // Save the user callbacks for later use 
-    // TODO
+    onConnect_ = onConnect;
+    onMessage_ = onMessage;
+    onDisconnect_ = onDisconnect;
+
+    // Start the chain of asynchronous callbacks
+
+    resolver_.async_resolve(url_, port_,
+        [this](auto ec, auto endpoint){
+            OnResolve(ec, endpoint);
+        }
+    );
 
 }
 
@@ -53,14 +63,23 @@ void WebSocketClient::Send(
         std::function<void (boost::system::error_code)> onSend = nullptr
 )
 {
-    // TODO
+    ws_.async_write(boost::asio::buffer(std::move(message)),
+        [this](auto ec, auto) {
+            if(onSend){
+                onSend(ec);
+            }
+        });
 }
 
 void WebSocketClient::Close(
         std::function<void (boost::system::error_code)> onClose = nullptr
 )
 {
-    // TODO
+    ws_.async_close(websocket::close_code::none, [this, onClose](auto ec){
+        if(onClose){
+            onClose(ec);
+        }
+    });
 }
 
 // Private methods
@@ -70,7 +89,24 @@ void WebSocketClient::OnResolve(
             boost::asio::ip::tcp::resolver::iterator endpoint
 )
 {
-    // TODO
+    if(ec){
+        Log("OnResolve", ec);
+        if(onConnect_) {
+            onConnect_(ec);
+        }
+        return;
+    }
+
+    // Timeout for the purpose of connecting to the TCP socket
+    ws_.next_layer().expires_after(std::chrono::seconds(5));
+
+    // Connect to the TCP socket
+    // The socket is embedded in ws_, and we access it through next_layer()
+    ws_.next_layer().async_connect(*endpoint,
+        [this](auto ec){
+            OnConnect(ec);
+        }
+    );
 }
 
 void WebSocketClient::OnConnect(

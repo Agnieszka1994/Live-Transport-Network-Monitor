@@ -66,6 +66,10 @@ namespace NetworkMonitor {
 
         boost::beast::flat_buffer rBuffer_ {};
 
+        std::function<void (boost::system::error_code)> onConnect_ {nullptr};
+        std::function<void (boost::system::error_code, 
+                            std::string&&)> onMessage_ {nullptr};
+        std::function<void (boost::system::error_code)> onDisconnect_ {nullptr};
         void OnResolve(
             const boost::system::error_code& ec,
             boost::asio::ip::tcp::resolver::iterator endpoint
