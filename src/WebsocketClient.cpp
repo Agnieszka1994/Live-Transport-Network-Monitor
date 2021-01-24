@@ -9,7 +9,7 @@
 #include <iostream>
 #include <string>
 
-using NetworkMonitor::WebSocketClient;
+using NetworkMonitor::WebsocketClient;
 
 using tcp = boost::asio::ip::tcp;
 namespace websocket = boost::beast::websocket;
@@ -23,7 +23,7 @@ static void Log(const std::string& where, boost::system::error_code ec)
               << std::endl;
 }
 
-WebSocketClient::WebSocketClient(
+WebsocketClient::WebsocketClient(
     const std::string& url,
     const std::string& port,
     boost::asio::io_context& ioc
@@ -34,13 +34,13 @@ WebSocketClient::WebSocketClient(
 {
 }
 
-WebSocketClient::~WebSocketClient() = default;
+WebsocketClient::~WebsocketClient() = default;
 
-void WebSocketClient::Connect(
-    std::function<void (boost::system::error_code)> onConnect = nullptr,
+void WebsocketClient::Connect(
+    std::function<void (boost::system::error_code)> onConnect,
     std::function<void (boost::system::error_code,
-                        std::string&&)> onMessage = nullptr,
-    std::function<void (boost::system::error_code)> onDisconnect = nullptr
+                        std::string&&)> onMessage,
+    std::function<void (boost::system::error_code)> onDisconnect
 )
 {
     // Save the user callbacks for later use 
@@ -58,33 +58,36 @@ void WebSocketClient::Connect(
 
 }
 
-void WebSocketClient::Send(
+void WebsocketClient::Send(
         const std::string& message,
-        std::function<void (boost::system::error_code)> onSend = nullptr
+        std::function<void (boost::system::error_code)> onSend
 )
 {
     ws_.async_write(boost::asio::buffer(std::move(message)),
-        [this](auto ec, auto) {
+        [this, onSend](auto ec, auto) {
             if(onSend){
                 onSend(ec);
             }
-        });
+        }
+    );
 }
 
-void WebSocketClient::Close(
-        std::function<void (boost::system::error_code)> onClose = nullptr
+void WebsocketClient::Close(
+        std::function<void (boost::system::error_code)> onClose
 )
 {
-    ws_.async_close(websocket::close_code::none, [this, onClose](auto ec){
-        if(onClose){
-            onClose(ec);
+    ws_.async_close(websocket::close_code::none, 
+        [this, onClose](auto ec){
+            if(onClose){
+                onClose(ec);
+            }
         }
-    });
+    );
 }
 
 // Private methods
 
-void WebSocketClient::OnResolve(
+void WebsocketClient::OnResolve(
             const boost::system::error_code& ec,
             boost::asio::ip::tcp::resolver::iterator endpoint
 )
@@ -109,33 +112,96 @@ void WebSocketClient::OnResolve(
     );
 }
 
-void WebSocketClient::OnConnect(
+void WebsocketClient::OnConnect(
             const boost::system::error_code& ec
 )
 {
-    // TODO
+    if(ec){
+        Log("OnConnect", ec);
+        if(onConnect_) {
+            onConnect_(ec);
+        }
+        return;
+    }
+
+    // the TCP socket is connected, we can reset the timeout to whatever Boost.Beast recommends
+    ws_.next_layer().expires_never();
+    ws_.set_option(websocket::stream_base::timeout::suggested(
+        boost::beast::role_type::client
+    ));
+
+    // Attempt a Websocket Handshake
+    ws_.async_handshake(url_, "/",
+        [this](auto ec){
+            OnHandshake(ec);
+        }
+    );
 }
 
-void WebSocketClient::OnHandshake(
+void WebsocketClient::OnHandshake(
             const boost::system::error_code& ec
 )
 {
-    // TODO
+    if(ec){
+        Log("OnHandshake", ec);
+        if(onConnect_) {
+            onConnect_(ec);
+        }
+        return;
+    }
+
+    // Tell the Websocket to exchange messages in text format
+    ws_.text(true);
+
+    // Set up a recursive asynchronous listener to receive messages
+    ListenToIncomingMessage(ec);
+
+    // Dispathc the user callback
+    // This call is synchronous and will block the Websocket strand
+    if(onConncet_) {
+        onConnect_(ec);
+    }
 }
 
-void WebSocketClient::ListenToIncomingMessage(
+void WebsocketClient::ListenToIncomingMessage(
             const boost::system::error_code& ec
 )
 {
-    // TODO
+    // Stop processing messages if the connection has been aborted 
+    if(ec == boost::asio::error::operation_aborted){
+        if(onDisconnect_) {
+            inDisconnect_(ec);
+        }
+        return;
+    }
+
+    // Read a message asynchronously. On a syccessful read, process the message
+    // and recursively call this function again to process the next message
+    ws_.async_read(rBuffer_,
+        [this](auto ec, auto nBytes) {
+            OnRead(ec, nBytes);
+            ListenToIncomingMessage();
+        }
+    );
 }
 
-void WebSocketClient::OnRead(
+void WebsocketClient::OnRead(
             const boost::system::error_code& ec,
             size_t nBytes
 )
 {
-    // TODO 
+    // Ignore messages that failed to read
+    if (ec) {
+        return;
+    }
+
+    // Parse the message and forward it to the user callback
+    // This call is synchronous and will block the Websocket strand
+    std::string message {boost::beast::buffers_to_string(rBuffer_.data())};
+    rBuffer_.consume(nBytes);
+    if (onMessage_) {
+        onMessage_(ec, std::move(message));
+    }
 }
 
 

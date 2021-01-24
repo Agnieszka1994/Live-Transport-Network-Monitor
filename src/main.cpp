@@ -5,20 +5,20 @@
 #include <iostream>
 #include <string>
 
-using NetworkMonitor::WebSocketClient;
+using NetworkMonitor::WebsocketClient;
 
 int main()
 {
     // Connection targets
     const std::string url {"echo.websocket.org"};
     const std::string port {"80"};
-    const std::string message {"Hello WebSocket"};
+    const std::string message {"Hello Websocket"};
 
     // Always start with an I/O context object.
     boost::asio::io_context ioc {};
 
     // The class under test
-    WebSocketClient client {url, port, ioc};
+    WebsocketClient client {url, port, ioc};
 
     // We use these flags to check that the connection, send, receive functions
     // work as expected.

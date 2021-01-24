@@ -12,7 +12,7 @@ namespace NetworkMonitor {
 
     class WebsocketClient {
     public:
-        WebSocketClient::WebSocketClient(
+        WebsocketClient(
         const std::string& url,
         const std::string& port,
         boost::asio::io_context& ioc
@@ -36,7 +36,7 @@ namespace NetworkMonitor {
             std::function<void (boost::system::error_code)> onDisconnect = nullptr
         );
 
-        /*! \brief Send a text message to the WebSocket server.
+        /*! \brief Send a text message to the Websocket server.
         *
         *  \param message The message to send.
         *  \param onSend  Called when a message is sent successfully or if it
@@ -47,19 +47,19 @@ namespace NetworkMonitor {
             std::function<void (boost::system::error_code)> onSend = nullptr
         );
 
-        /*! \brief Close the WebSocket connection.
+        /*! \brief Close the Websocket connection.
         *
         *  \param onClose Called when the connection is closed, successfully or
         *                 not.
         */
 
         void Close(
-            std::funciton<void (boost::system::error_code)> onClose = nullptr
+            std::function<void (boost::system::error_code)> onClose = nullptr
         );
 
     private:
         std::string url_ {};
-        std::string port {};
+        std::string port_ {};
         // Leaving these uninitialized because they do not support a default constructor
         boost::asio::ip::tcp::resolver resolver_;
         boost::beast::websocket::stream<boost::beast::tcp_stream> ws_;
@@ -67,8 +67,9 @@ namespace NetworkMonitor {
         boost::beast::flat_buffer rBuffer_ {};
 
         std::function<void (boost::system::error_code)> onConnect_ {nullptr};
-        std::function<void (boost::system::error_code, 
-                            std::string&&)> onMessage_ {nullptr};
+
+        std::function<void (boost::system::error_code,
+                        std::string&&)> onMessage_ {nullptr};
         std::function<void (boost::system::error_code)> onDisconnect_ {nullptr};
         void OnResolve(
             const boost::system::error_code& ec,
