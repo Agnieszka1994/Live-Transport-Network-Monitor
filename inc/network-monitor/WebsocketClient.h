@@ -60,8 +60,10 @@ namespace NetworkMonitor {
     private:
         std::string url_ {};
         std::string port_ {};
+
         // Leaving these uninitialized because they do not support a default constructor
         boost::asio::ip::tcp::resolver resolver_;
+
         boost::beast::websocket::stream<boost::beast::tcp_stream> ws_;
 
         boost::beast::flat_buffer rBuffer_ {};
@@ -70,7 +72,9 @@ namespace NetworkMonitor {
 
         std::function<void (boost::system::error_code,
                         std::string&&)> onMessage_ {nullptr};
+
         std::function<void (boost::system::error_code)> onDisconnect_ {nullptr};
+        
         void OnResolve(
             const boost::system::error_code& ec,
             boost::asio::ip::tcp::resolver::iterator endpoint
