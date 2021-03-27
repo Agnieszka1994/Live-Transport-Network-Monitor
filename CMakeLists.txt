@@ -22,7 +22,7 @@ add_library(network-monitor STATIC ${LIB_SOURCES})
 
 target_compile_features(network-monitor
     PUBLIC
-        cxx_std_14
+        cxx_std_17
 )
 target_include_directories(network-monitor
     PUBLIC
@@ -33,7 +33,7 @@ target_link_libraries(network-monitor
         Boost::Boost
         OpenSSL::OpenSSL
 )
-    
+
 # Tests
 set(TESTS_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/WebsocketClient.cpp"
@@ -43,6 +43,10 @@ add_executable(network-monitor-tests ${TESTS_SOURCES})
 target_compile_features(network-monitor-tests
     PRIVATE
         cxx_std_14
+)
+target_compile_definitions(network-monitor-tests
+    PRIVATE 
+        TESTS_CACERT_PEM="${CMAKE_CURRENT_SOURCE_DIR}/tests/cacert.pem"
 )
 target_link_libraries(network-monitor-tests
     PRIVATE

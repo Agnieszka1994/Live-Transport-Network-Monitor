@@ -4,11 +4,17 @@
 #include <boost/test/unit_test.hpp>
 #include <openssl/ssl.h>
 
+#include <filesystem>
 #include <string>
 
 using NetworkMonitor::WebsocketClient;
 
 BOOST_AUTO_TEST_SUITE(network_monitor);
+
+BOOST_AUTO_TEST_CASE(cacert_pem)
+{
+    BOOST_CHECK(std::filesystem::exists(TESTS_CACERT_PEM));
+}
 
 BOOST_AUTO_TEST_CASE(class_WebsocketClient)
 {
