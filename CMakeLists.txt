@@ -9,6 +9,7 @@ if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/conaninfo.txt)
     set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 find_package(Boost 1.74 REQUIRED COMPONENTS system unit_test_framework)
+find_package(OpenSSL REQUIRED)      
 
 enable_testing()
 
@@ -30,8 +31,9 @@ target_include_directories(network-monitor
 target_link_libraries(network-monitor
     PUBLIC
         Boost::Boost
+        OpenSSL::OpenSSL
 )
-
+    
 # Tests
 set(TESTS_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/WebsocketClient.cpp"
