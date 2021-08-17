@@ -2,7 +2,10 @@
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
+#include <boost/beast/ssl.hpp>
 #include <boost/system/error_code.hpp>
+
+#include <openssl/ssl.h>
 
 #include <chrono>
 #include <functional>
@@ -27,11 +30,12 @@ static void Log(const std::string& where, boost::system::error_code ec)
 WebsocketClient::WebsocketClient(
     const std::string& url,
     const std::string& port,
-    boost::asio::io_context& ioc
+    boost::asio::io_context& ioc,
+    boost::asio::ssl::context& ctx
 ) : url_ {url},
     port_ {port},
     resolver_ {boost::asio::make_strand(ioc)},
-    ws_ {boost::asio::make_strand(ioc)}
+    ws_ {boost::asio::make_strand(ioc), ctx}
 {
 }
 
@@ -90,7 +94,7 @@ void WebsocketClient::Close(
 
 void WebsocketClient::OnResolve(
             const boost::system::error_code& ec,
-            boost::asio::ip::tcp::resolver::iterator endpoint
+            tcp::resolver::iterator resolverIt
 )
 {
     if(ec){
@@ -101,13 +105,16 @@ void WebsocketClient::OnResolve(
         return;
     }
 
-    // Timeout for the purpose of connecting to the TCP socket
-    ws_.next_layer().expires_after(std::chrono::seconds(5));
+    // The following timeout only matters for the purpose of connecting to the
+    // TCP socket. We will reset the timeout to a sensible default after we are
+    // connected.
+    // Note: The TCP layer is the lowest layer (WebSocket -> TLS -> TCP).
+    boost::beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(5));
 
-    // Connect to the TCP socket
-    // The socket is embedded in ws_, and we access it through next_layer()
-    ws_.next_layer().async_connect(*endpoint,
-        [this](auto ec){
+    // Connect to the TCP socket.
+    // Note: The TCP layer is the lowest layer (WebSocket -> TLS -> TCP).
+    boost::beast::get_lowest_layer(ws_).async_connect(*resolverIt,
+        [this](auto ec) {
             OnConnect(ec);
         }
     );
@@ -125,16 +132,23 @@ void WebsocketClient::OnConnect(
         return;
     }
 
-    // the TCP socket is connected, we can reset the timeout to whatever Boost.Beast recommends
-    ws_.next_layer().expires_never();
+    // Now that the TCP socket is connected, we can reset the timeout to
+    // whatever Boost.Beast recommends.
+    // Note: The TCP layer is the lowest layer (WebSocket -> TLS -> TCP).
+    boost::beast::get_lowest_layer(ws_).expires_never();
     ws_.set_option(websocket::stream_base::timeout::suggested(
         boost::beast::role_type::client
     ));
 
-    // Attempt a Websocket Handshake
-    ws_.async_handshake(url_, "/",
-        [this](auto ec){
-            OnHandshake(ec);
+    // Some clients require that we set the host name before the TLS handshake
+    // or the connection will fail. We use an OpenSSL function for that.
+    SSL_set_tlsext_host_name(ws_.next_layer().native_handle(), url_.c_str());
+
+    // Attempt a TLS handshake.
+    // Note: The TLS layer is the next layer (WebSocket -> TLS -> TCP).
+    ws_.next_layer().async_handshake(boost::asio::ssl::stream_base::client,
+        [this](auto ec) {
+            OnTlsHandshake(ec);
         }
     );
 }
@@ -162,6 +176,26 @@ void WebsocketClient::OnHandshake(
     if(onConnect_) {
         onConnect_(ec);
     }
+}
+
+void WebsocketClient::OnTlsHandshake(
+            const boost::system::error_code& ec
+)
+{
+    if (ec) {
+        Log("OnTlsHandshake", ec);
+        if (onConnect_) {
+            onConnect_(ec);
+        }
+        return;
+    }
+
+    // Attempt a WebSocket handshake.
+    ws_.async_handshake(url_, "/",
+        [this](auto ec) {
+            OnHandshake(ec);
+        }
+    );
 }
 
 void WebsocketClient::ListenToIncomingMessage(

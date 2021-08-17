@@ -2,7 +2,6 @@
 
 #include <boost/asio.hpp>
 #include <boost/test/unit_test.hpp>
-#include <openssl/ssl.h>
 
 #include <filesystem>
 #include <string>
@@ -20,14 +19,18 @@ BOOST_AUTO_TEST_CASE(class_WebsocketClient)
 {
     // Connection targets
     const std::string url {"echo.websocket.org"};
-    const std::string port {"80"};
+    const std::string port {"443"};
     const std::string message {"Hello Websocket"};
 
     // Always start with an I/O context object.
     boost::asio::io_context ioc {};
 
+    // TLS context
+    boost::asio::ssl::context ctx {boost::asio::ssl::context::tlsv12_client};
+    ctx.load_verify_file(TESTS_CACERT_PEM);
+
     // The class under test
-    WebsocketClient client {url, port, ioc};
+    WebsocketClient client {url, port, ioc, ctx};
 
     // We use these flags to check that the connection, send, receive functions
     // work as expected.
