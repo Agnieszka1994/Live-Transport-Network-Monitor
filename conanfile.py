@@ -10,6 +10,7 @@ class ConanPackage(ConanFile):
         ('boost/1.74.0'),
         ('libcurl/7.73.0'),
         ('openssl/1.1.1h'),
+        ('nlohmann_json/3.10.0')
     ]
 
     default_options = (
