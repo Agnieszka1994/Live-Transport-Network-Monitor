@@ -29,10 +29,12 @@ static void Log(const std::string& where, boost::system::error_code ec)
 
 WebsocketClient::WebsocketClient(
     const std::string& url,
+    const std::string& endpoint,
     const std::string& port,
     boost::asio::io_context& ioc,
     boost::asio::ssl::context& ctx
 ) : url_ {url},
+    endpoint_ {endpoint},
     port_ {port},
     resolver_ {boost::asio::make_strand(ioc)},
     ws_ {boost::asio::make_strand(ioc), ctx}
@@ -191,7 +193,7 @@ void WebsocketClient::OnTlsHandshake(
     }
 
     // Attempt a WebSocket handshake.
-    ws_.async_handshake(url_, "/",
+    ws_.async_handshake(url_, endpoint_,
         [this](auto ec) {
             OnHandshake(ec);
         }

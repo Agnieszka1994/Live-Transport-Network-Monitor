@@ -15,6 +15,7 @@ namespace NetworkMonitor {
     public:
         WebsocketClient(
             const std::string& url,
+            const std::string& endpoint,
             const std::string& port,
             boost::asio::io_context& ioc,
             boost::asio::ssl::context& ctx
@@ -61,6 +62,7 @@ namespace NetworkMonitor {
 
     private:
         std::string url_ {};
+        std::string endpoint_ {};
         std::string port_ {};
 
         // Leaving these uninitialized because they do not support a default constructor
