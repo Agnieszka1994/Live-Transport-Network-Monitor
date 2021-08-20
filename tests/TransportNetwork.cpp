@@ -1,4 +1,4 @@
-#include <network-monitor/transport-network.h>
+#include <network-monitor/TransportNetwork.h>
 
 #include <boost/test/unit_test.hpp>
 
