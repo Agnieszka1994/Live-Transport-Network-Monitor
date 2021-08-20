@@ -2,6 +2,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <nlohmann/json.hpp>
 namespace NetworkMonitor {
 
 /*! \brief A station, line, or route ID.
@@ -238,6 +239,23 @@ public:
         const Id& stationB
     ) const;
 
+    /*! \brief Populate the network from a JSON object.
+     *
+     *  \param src Ownership of the source JSON object is moved to this method.
+     *
+     *  \returns false if stations and lines where parsed successfully, but not
+     *           the travel times.
+     *
+     *  \throws std::runtime_error This method throws if the JSON items were
+     *                             parsed correctly but there was an issue
+     *                             adding new stations or lines to the network.
+     *  \throws nlohmann::json::exception If there was a problem parsing the
+     *                                    JSON object.
+     */
+    bool FromJson(
+        nlohmann::json&& src
+    );
+    
     private:
         // Internal structs
         struct GraphNode;
