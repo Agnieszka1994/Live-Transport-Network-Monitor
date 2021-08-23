@@ -3,7 +3,6 @@ a.out
 settings.json
 *.o
 build/*
-*.json
 
 # Prerequisites
 *.d
