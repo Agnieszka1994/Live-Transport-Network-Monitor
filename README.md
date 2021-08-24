@@ -14,8 +14,8 @@ The `quiet-route` service provides on-demand itinerary recommendations for the q
 ## Project structure
 The application contains the following components:
 
-- A `WebSocket/STOMP client` that connects to the network-events service. The client supports TLS connections and needs to authenticate with the server.
-- `A WebSocket/STOMP server` that provides the quiet-route service. The server supports TLS connections but no authentication.
+- A `Websocket/STOMP client` that connects to the network-events service. The client supports TLS connections and needs to authenticate with the server.
+- `A Websocket/STOMP server` that provides the quiet-route service. The server supports TLS connections but no authentication.
 - A `C++ object` representing the `network layout` and the current level of crowding on the Underground network, as informed by the live passenger events. This component also offers APIs to produce `itineraries from A to B`.
 A `C++ component that produces quiet route recommendations` based on a request to go from A to B.
 
@@ -26,14 +26,14 @@ A `C++ component that produces quiet route recommendations` based on a request t
 - Solid `build system` and an `automated deployment pipeline`.
 
 ## London Transport Company - Infrastructure overview
-The LTC infrastructure uses WebSockets extensively to communicate acress services.
+The LTC infrastructure uses Websockets extensively to communicate acress services.
 They offer a service that sends live network events, called `network-events`.
 
 **Real-time network events**
 The `network-event` data feed provides real time network events for the London Underground lines. It provides one type of events: `Passenger events`, which represent passenger action, like `entering` and `exiting` a station.
 
 **Protocol**
-The `network-events` data feed follows the `STOMP 1.2 protocol` and is served over secure WebSockets.
+The `network-events` data feed follows the `STOMP 1.2 protocol` and is served over secure Websockets.
 
 **Underground network layout**
 The London Underground networl layout is described by a static JSON file listing all lines and stations.
