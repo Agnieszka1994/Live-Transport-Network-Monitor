@@ -13,6 +13,8 @@
 using NetworkMonitor::BoostWebsocketClient;
 using NetworkMonitor::MockResolver;
 using NetworkMonitor::MockTcpStream;
+using NetworkMonitor::MockTlsStream;
+using NetworkMonitor::MockTlsWebsocketStream;
 using NetworkMonitor::TestWebsocketClient;
 
 // Re-initialize all mock properties before a test.
@@ -21,8 +23,11 @@ struct WebsocketClientTestFixture {
     {
         MockResolver::resolveEc = {};
         MockTcpStream::connectEc = {};
+        MockTlsStream::handshakeEc = {};
+        MockTlsWebsocketStream::handshakeEc = {};
     }
 };
+
 // Use this to set a timeout on tests that may hang or suffer from a slow
 // connection.
 using timeout = boost::unit_test::timeout;
@@ -84,6 +89,62 @@ BOOST_AUTO_TEST_CASE(fail_socket_connect, *timeout {1})
     auto onConnect {[&calledOnConnect](auto ec) {
         calledOnConnect = true;
         BOOST_CHECK_EQUAL(ec, boost::asio::error::connection_refused);
+    }};
+    client.Connect(onConnect);
+    ioc.run();
+
+    // When we get here, the io_context::run function has run out of work to do.
+    BOOST_CHECK(calledOnConnect);
+}
+
+BOOST_AUTO_TEST_CASE(fail_tls_handshake, *timeout {1})
+{
+    // We use the mock client so we don't really connect to the target.
+    const std::string url {"some.echo-server.com"};
+    const std::string endpoint {"/"};
+    const std::string port {"443"};
+
+    boost::asio::ssl::context ctx {boost::asio::ssl::context::tlsv12_client};
+    ctx.load_verify_file(TESTS_CACERT_PEM);
+    boost::asio::io_context ioc {};
+
+    // Set the expected error codes.
+    namespace error = boost::asio::ssl::error;
+    MockTlsStream::handshakeEc = error::stream_truncated;
+
+    TestWebsocketClient client {url, endpoint, port, ioc, ctx};
+    bool calledOnConnect {false};
+    auto onConnect {[&calledOnConnect](auto ec) {
+        calledOnConnect = true;
+        BOOST_CHECK_EQUAL(ec, error::stream_truncated);
+    }};
+    client.Connect(onConnect);
+    ioc.run();
+
+    // When we get here, the io_context::run function has run out of work to do.
+    BOOST_CHECK(calledOnConnect);
+}
+
+BOOST_AUTO_TEST_CASE(fail_websocket_handshake, *timeout {1})
+{
+    // We use the mock client so we don't really connect to the target.
+    const std::string url {"some.echo-server.com"};
+    const std::string endpoint {"/"};
+    const std::string port {"443"};
+
+    boost::asio::ssl::context ctx {boost::asio::ssl::context::tlsv12_client};
+    ctx.load_verify_file(TESTS_CACERT_PEM);
+    boost::asio::io_context ioc {};
+
+    // Set the expected error codes.
+    using error = boost::beast::websocket::error;
+    MockTlsWebsocketStream::handshakeEc = error::upgrade_declined;
+
+    TestWebsocketClient client {url, endpoint, port, ioc, ctx};
+    bool calledOnConnect {false};
+    auto onConnect {[&calledOnConnect](auto ec) {
+        calledOnConnect = true;
+        BOOST_CHECK(ec == error::upgrade_declined);
     }};
     client.Connect(onConnect);
     ioc.run();

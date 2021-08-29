@@ -8,19 +8,19 @@
 
 namespace NetworkMonitor {
     /*!
-    *
-    */
+     *
+     */
     class MockResolver {
         public:
 
         /*! \brief Use this static member in a test to set the error code returned
-        *         by async_resolve.
-        */
+         *         by async_resolve.
+         */
         static boost::system::error_code resolveEc;
 
         /*!
-        * Mock for the resolver constructor
-        */
+         * Mock for the resolver constructor
+         */
         template<typename ExecutionContext>
         explicit MockResolver(
             ExecutionContext&& ctx
@@ -29,8 +29,8 @@ namespace NetworkMonitor {
         }
 
         /*!
-        * Mock for resolver::async_resolve
-        */
+         * Mock for resolver::async_resolve
+         */
         template<typename ResolveHandler>
         void async_resolve(
             boost::string_view host,
@@ -89,24 +89,22 @@ namespace NetworkMonitor {
     // Out-of-line static member initialization
     inline boost::system::error_code MockResolver::resolveEc {};
 
-        /*! \brief Mock the TCP socket stream from Boost.Beast.
-    *
-    *  We do not mock all available methods — only the ones we are interested in
-    *  for testing.
-    */
+    /*! \brief Mock the TCP socket stream from Boost.Beast.
+     *
+     */
     class MockTcpStream: public boost::beast::tcp_stream {
     public:
         /*! \brief Inherit all constructors from the parent class.
-        */
+         */
         using boost::beast::tcp_stream::tcp_stream;
 
         /*! \brief Used in a test to set the error code returned
-        *         by async_connect.
-        */
+         *         by async_connect.
+         */
         static boost::system::error_code connectEc;
 
         /*! \brief Mock for tcp_stream::async_connect
-        */
+         */
         template <typename ConnectHandler>
         void async_connect(
             endpoint_type type,
@@ -148,12 +146,140 @@ namespace NetworkMonitor {
     }
 
     /*! \brief Type alias for the mocked WebsocketClient.
-    */
+     */
     using TestWebsocketClient = WebsocketClient<
         MockResolver,
         boost::beast::websocket::stream<
             boost::beast::ssl_stream<MockTcpStream>
         >
+    >;
+
+    template <typename TcpStream>
+    class MockSslStream: public boost::beast::ssl_stream<TcpStream> {
+    public:
+        /*!
+         * \brief Inherit all constructors from the parent class
+         */
+        using boost::beast::ssl_stream<TcpStream>::ssl_stream;
+
+        /*!
+         * \brief Use this static member in a test to set the error code returned by 
+         * .async_handshake
+         */
+        static boost::system::error_code handshakeEc;
+
+        /*!
+         * \brief Mock for all ssl_stream::async_handshake
+         */
+        template <typename HandshakeHandler>
+        void async_handshake(
+            boost::asio::ssl::stream_base::handshake_type type,
+            HandshakeHandler&& handler
+        )
+        {
+            return boost::asio::async_initiate<
+            HandshakeHandler,
+            void (boost::system::error_code)
+            >(
+                [](auto&& handler, auto stream) {
+                    // Call the user callback
+                    boost::asio::post(
+                        stream->get_executor(),
+                        boost::beast::bind_handler(
+                            std::move(handler),
+                            MockSslStream::handshakeEc
+                        )
+                    );
+                },
+                handler,
+                this
+            );
+        }
+    };
+
+    // Out of line static member initialisation
+    template <typename TcpStream>
+    boost::system::error_code MockSslStream<TcpStream>::handshakeEc = {};
+
+    // This overload is required by Boost.Beast when you define a custom stream
+    template <typename TeardownHandler>
+    void async_teardown(
+        boost::beast::role_type role,
+        MockSslStream<MockTcpStream>& socket,
+        TeardownHandler&& handler
+    )
+    {
+        return;
+    }
+
+    /*!
+     * \brief Mock the websocket stream from Boost.Beast
+     */
+    template <typename TransportStream>
+    class MockWebsocketStream: public boost::beast::websocket::stream<TransportStream>
+    {
+
+    public:
+        /*!
+         * \brief Inherit all constructors from the parent class
+         */
+        boost::beast::websocket::stream<TransportStream>::stream;
+        
+        /* 
+         * \brief Use this static member in a test to set the error code returned by
+         * async_handshake.
+         */
+        static boost::system::error_code handshakeEc;
+
+        /* 
+         * \brief Mock for websocket::stream::async_handshake
+         */
+        template <typename HandshakeHandler>
+        void async_handshake(
+            boost::string_view host,
+            boost::string_view target,
+            HandshakeHandler&& handler
+        )
+        {
+            return boost::asio::async_initiate<
+                HandshakeHandler,
+                void (boost::system::error_code)
+            >(
+                [](auto&& handler, auto stream, auto host, auto target) {
+                    // Call the user callback.
+                    boost::asio::post(
+                        stream->get_executor(),
+                        boost::beast::bind_handler(
+                            std::move(handler),
+                            MockWebsocketStream::handshakeEc
+                        )
+                    );
+                },
+                handler,
+                this,
+                host.to_string(),
+                target.to_string()
+            );
+        }
+    
+    };
+    
+    // Out-of-line static member initialisation
+    template <typename TransportStream>
+    boost::system::error_code MockWebsocketStream<TransportStream>::handshakeEc = {};
+    /*! \brief Type alias for the mocked ssl_stream.
+     */
+    using MockTlsStream = MockSslStream<MockTcpStream>;
+
+    /*! \brief Type alias for the mocked websocket::stream.
+     */
+    using MockTlsWebsocketStream = MockWebsocketStream<MockTlsStream>;
+
+    /*! \brief Type alias for the mocked WebsocketClient.
+     */
+    using TestWebsocketClient = WebsocketClient<
+        MockResolver,
+        MockTlsWebsocketStream
     >;
 } // namespace NetworkMonitor
 
