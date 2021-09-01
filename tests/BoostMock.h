@@ -5,7 +5,7 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/utility/string_view.hpp>
-
+#include <string>
 namespace NetworkMonitor {
     /*!
      *
@@ -144,15 +144,6 @@ namespace NetworkMonitor {
     {
         return;
     }
-
-    /*! \brief Type alias for the mocked WebsocketClient.
-     */
-    using TestWebsocketClient = WebsocketClient<
-        MockResolver,
-        boost::beast::websocket::stream<
-            boost::beast::ssl_stream<MockTcpStream>
-        >
-    >;
 
     template <typename TcpStream>
     class MockSslStream: public boost::beast::ssl_stream<TcpStream> {
