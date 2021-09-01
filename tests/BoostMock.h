@@ -214,13 +214,33 @@ namespace NetworkMonitor {
         /*!
          * \brief Inherit all constructors from the parent class
          */
-        boost::beast::websocket::stream<TransportStream>::stream;
+        using boost::beast::websocket::stream<TransportStream>::stream;
         
         /* 
          * \brief Use this static member in a test to set the error code returned by
          * async_handshake.
          */
         static boost::system::error_code handshakeEc;
+
+        /* \brief Use this static member in a test to set the error code returned by
+         *        async_read.
+         */
+        static boost::system::error_code readEc;
+
+        /* \brief Use this static member in a test to set the buffer content read by
+         *        async_read.
+         */
+        static std::string readBuffer;
+
+        /* \brief Use this static member in a test to set the error code returned by
+         *        async_write.
+         */
+        static boost::system::error_code writeEc;
+
+        /* \brief Use this static member in a test to set the error code returned by
+         *        async_close.
+         */
+        static boost::system::error_code closeEc;
 
         /* 
          * \brief Mock for websocket::stream::async_handshake
@@ -253,11 +273,185 @@ namespace NetworkMonitor {
             );
         }
     
+        template <typename CloseHandler>
+        void async_close(
+            const boost::beast::websocket::close_reason& cr,
+            CloseHandler&& handler
+        )
+        {
+            return boost::asio::async_initiate<
+                CloseHandler,
+                void (boost::system::error_code)
+            >(
+                [](auto&& handler, auto stream) {
+                    // The Websocket must be connected to begin with
+                    if (stream->closed_) {
+                        boost::asio::post(
+                            stream->get_executor(),
+                            boost::beast::bind_handler(
+                                std::move(handler),
+                                boost::asio::error::operation_aborted
+                            )
+                        );
+                    } else {
+                        if (!MockWebsocketStream::closeEc) {
+                            stream->closed_ = true;
+                        }
+                        // Call the user callback
+                        boost::asio::post(
+                            stream->get_executor(),
+                            boost::beast::bind_handler(
+                                std::move(handler),
+                                MockWebsocketStream::closeEc
+                            )
+                        );
+                    }
+                },
+                handler,
+                this
+            );
+        }
+
+        /*! \brief Mock for websocket::stream::async_write
+         */
+        template <typename ConstBufferSequence, typename WriteHandler>
+        void async_write(
+            const ConstBufferSequence& buffers,
+            WriteHandler&& handler
+        )
+        {
+            return boost::asio::async_initiate<
+                WriteHandler,
+                void (boost::system::error_code, size_t)
+            >(
+                [](auto&& handler, auto stream, auto& buffers) {
+                    if (stream->closed_) {
+                        // If the connection has been closed, the write operation
+                        // aborts.
+                        boost::asio::post(
+                            stream->get_executor(),
+                            boost::beast::bind_handler(
+                                std::move(handler),
+                                boost::asio::error::operation_aborted,
+                                0
+                            )
+                        );
+                    } else {
+                        // Call the user callback.
+                        boost::asio::post(
+                            stream->get_executor(),
+                            boost::beast::bind_handler(
+                                std::move(handler),
+                                MockWebsocketStream::writeEc,
+                                MockWebsocketStream::writeEc ? 0 : buffers.size()
+                            )
+                        );
+                    }
+                },
+                handler,
+                this,
+                buffers
+            );
+        }
+
+        /*! \brief Mock for websocket::stream::async_read
+        */
+        template <typename DynamicBuffer, typename ReadHandler>
+        void async_read(
+            DynamicBuffer& buffer,
+            ReadHandler&& handler
+        )
+        {
+            return boost::asio::async_initiate<
+                ReadHandler,
+                void (boost::system::error_code, size_t)
+            >(
+                [this](auto&& handler, auto& buffer) {
+                    // Call a recursive function that mocks a series of reads from
+                    // the Websockets.
+                    RecursiveRead(handler, buffer);
+                },
+                handler,
+                buffer
+            );
+        }
+
+    private:
+        // Used to check if we can proceed with a successful response.
+        bool closed_ {true};
+
+        // This function mimicks a socket reading messages. It's the function we
+        // call from async_read.
+        template <typename DynamicBuffer, typename ReadHandler>
+        void RecursiveRead(
+            ReadHandler&& handler,
+            DynamicBuffer& buffer
+        )
+        {
+            if (closed_) {
+                // If the connection has been closed, the read operation aborts.
+                boost::asio::post(
+                    this->get_executor(),
+                    boost::beast::bind_handler(
+                        std::move(handler),
+                        boost::asio::error::operation_aborted,
+                        0
+                    )
+                );
+            } else {
+                // Read the buffer. This may be empty 
+                size_t nRead;
+                nRead = MockWebsocketStream::readBuffer.size();
+                nRead = boost::asio::buffer_copy(
+                    buffer.prepare(nRead),
+                    boost::asio::buffer(MockWebsocketStream::readBuffer)
+                );
+                buffer.commit(nRead);
+
+                // Clear the mock buffer for the next read.
+                MockWebsocketStream::readBuffer = "";
+
+                if (nRead == 0) {
+                    // If there was nothing to read, recursively go and wait for
+                    // a new message.
+                    boost::asio::post(
+                        this->get_executor(),
+                        [this, handler = std::move(handler), &buffer]() {
+                            RecursiveRead(handler, buffer);
+                        }
+                    );
+                } else {
+                    // On a legitimate message, call the async_read original
+                    // handler.
+                    boost::asio::post(
+                        this->get_executor(),
+                        boost::beast::bind_handler(
+                            std::move(handler),
+                            MockWebsocketStream::readEc,
+                            nRead
+                        )
+                    );
+                }
+            }
+        }
     };
     
     // Out-of-line static member initialisation
     template <typename TransportStream>
     boost::system::error_code MockWebsocketStream<TransportStream>::handshakeEc = {};
+
+    template <typename TransportStream>
+    boost::system::error_code MockWebsocketStream<TransportStream>::readEc = {};
+
+    template <typename TransportStream>
+    std::string MockWebsocketStream<TransportStream>::readBuffer = "";
+
+    template <typename TransportStream>
+    boost::system::error_code MockWebsocketStream<TransportStream>::writeEc = {};
+
+    template <typename TransportStream>
+    boost::system::error_code MockWebsocketStream<TransportStream>::closeEc = {};
+
     /*! \brief Type alias for the mocked ssl_stream.
      */
     using MockTlsStream = MockSslStream<MockTcpStream>;
