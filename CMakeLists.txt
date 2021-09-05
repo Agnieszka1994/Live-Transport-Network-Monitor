@@ -11,7 +11,8 @@ endif()
 find_package(Boost 1.74 REQUIRED COMPONENTS system unit_test_framework)
 find_package(CURL REQUIRED)
 find_package(nlohmann_json REQUIRED)
-find_package(OpenSSL REQUIRED)      
+find_package(OpenSSL REQUIRED)   
+find_package(spdlog REQUIRED)   
 
 enable_testing()
 
@@ -20,6 +21,7 @@ set(LIB_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/FileDownloader.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/StompFrame.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/TransportNetwork.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/StompClient.cpp"
 )
 
 add_library(network-monitor STATIC ${LIB_SOURCES})
@@ -47,6 +49,8 @@ set(TESTS_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/WebsocketClient.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/TransportNetwork.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/StompFrame.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/StompClient.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/WebsocketClientMock.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/main.cpp"
 )
 add_executable(network-monitor-tests ${TESTS_SOURCES})
@@ -64,7 +68,9 @@ target_link_libraries(network-monitor-tests
     PRIVATE
         network-monitor
         Boost::Boost
+        nlohmann_json::nlohmann_json
         OpenSSL::OpenSSL
+        spdlog::spdlog
 )
 
 add_test(
