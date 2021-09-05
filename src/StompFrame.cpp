@@ -3,8 +3,8 @@
 #include <charconv>
 #include <initializer_list>
 #include <ostream>
-#include <string_view>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -15,7 +15,7 @@ using NetworkMonitor::StompHeader;
 
 using Headers = StompFrame::Headers;
 
-// Generate a boost::bimap.
+// Utility function to generate a boost::bimap.
 template <typename L, typename R>
 static boost::bimap<L, R> MakeBimap(
     std::initializer_list<typename boost::bimap<L, R>::value_type> list
@@ -24,7 +24,7 @@ static boost::bimap<L, R> MakeBimap(
     return boost::bimap<L, R>(list.begin(), list.end());
 }
 
-// Convert a std::string_view to a number.
+// Utility function to convert a std::string_view to a number.
 // Returns false if the conversion failed.
 static bool StoI(const std::string_view string, size_t& result)
 {
@@ -36,25 +36,25 @@ static bool StoI(const std::string_view string, size_t& result)
     return conversionResult.ec != std::errc::invalid_argument;
 }
 
-// Stomp Command 
+// StompCommand
 
-static const auto gStompCommandStrings { 
+static const auto gStompCommandStrings {
     MakeBimap<StompCommand, std::string_view>({
-        {StompCommand::kAbort       , "ABORT"       },
-        {StompCommand::kAck         , "ACK"         },
-        {StompCommand::kBegin       , "BEGIN"       },
-        {StompCommand::kCommit      , "COMMIT"      },
-        {StompCommand::kConnect     , "CONNECT"     },
-        {StompCommand::kConnected   , "CONNECTED"   },
-        {StompCommand::kDisconnect  , "DISCONNEST"  },
-        {StompCommand::kError       , "ERROR"       },
-        {StompCommand::kMessage     , "MESSAGE"     },
-        {StompCommand::kNack        , "NACK"        },
-        {StompCommand::kReceipt     , "RECEIPT"     },
-        {StompCommand::kSend        , "SEND"        },
-        {StompCommand::kStomp       , "STOMP"       },
-        {StompCommand::kSubscribe   , "SUBSTRIBE"   },
-        {StompCommand::kUnsubscribe , "UNSUBSCRIBE" },
+        {StompCommand::kAbort      , "ABORT"      },
+        {StompCommand::kAck        , "ACK"        },
+        {StompCommand::kBegin      , "BEGIN"      },
+        {StompCommand::kCommit     , "COMMIT"     },
+        {StompCommand::kConnect    , "CONNECT"    },
+        {StompCommand::kConnected  , "CONNECTED"  },
+        {StompCommand::kDisconnect , "DISCONNECT" },
+        {StompCommand::kError      , "ERROR"      },
+        {StompCommand::kMessage    , "MESSAGE"    },
+        {StompCommand::kNack       , "NACK"       },
+        {StompCommand::kReceipt    , "RECEIPT"    },
+        {StompCommand::kSend       , "SEND"       },
+        {StompCommand::kStomp      , "STOMP"      },
+        {StompCommand::kSubscribe  , "SUBSCRIBE"  },
+        {StompCommand::kUnsubscribe, "UNSUBSCRIBE"},
     })
 };
 
@@ -64,10 +64,10 @@ std::ostream& NetworkMonitor::operator<<(
 )
 {
     auto commandIt {gStompCommandStrings.left.find(command)};
-    if(commandIt == gStompCommandStrings.left.end()) {
+    if (commandIt == gStompCommandStrings.left.end()) {
         os << "StompCommand::kInvalid";
     } else {
-        os <<commandIt->second;
+        os << commandIt->second;
     }
     return os;
 }
@@ -122,8 +122,8 @@ std::ostream& NetworkMonitor::operator<<(
     const StompHeader& header
 )
 {
-    auto headerIt {gStompCommandStrings.left.find(header)};
-    if (headerIt == gStompCommandStrings.left.end()) {
+    auto headerIt {gStompHeaderStrings.left.find(header)};
+    if (headerIt == gStompHeaderStrings.left.end()) {
         os << "StompHeader::kInvalid";
     } else {
         os << headerIt->second;
@@ -133,8 +133,8 @@ std::ostream& NetworkMonitor::operator<<(
 
 std::string NetworkMonitor::ToString(const StompHeader& header)
 {
-    auto headerIt {gStompCommandStrings.left.find(header)};
-    if (headerIt == gStompCommandStrings.left.end()) {
+    auto headerIt {gStompHeaderStrings.left.find(header)};
+    if (headerIt == gStompHeaderStrings.left.end()) {
         return "StompHeader::kInvalid";
     }
     return std::string(headerIt->second);
@@ -143,8 +143,8 @@ std::string NetworkMonitor::ToString(const StompHeader& header)
 static const StompHeader& ToHeader(const std::string_view header)
 {
     static const auto invalidHeader {StompHeader::kInvalid};
-    auto headerIt {gStompCommandStrings.right.find(header)};
-    if (headerIt == gStompCommandStrings.right.end()) {
+    auto headerIt {gStompHeaderStrings.right.find(header)};
+    if (headerIt == gStompHeaderStrings.right.end()) {
         return invalidHeader;
     }
     return headerIt->second;
@@ -180,7 +180,7 @@ std::ostream& NetworkMonitor::operator<<(
 )
 {
     static const auto undefinedError {
-        gStompCommandStrings.left.at(StompError::kUndefinedError)
+        gStompErrorStrings.left.at(StompError::kUndefinedError)
     };
     auto errorIt {gStompErrorStrings.left.find(error)};
     if (errorIt == gStompErrorStrings.left.end()) {
@@ -194,10 +194,10 @@ std::ostream& NetworkMonitor::operator<<(
 std::string NetworkMonitor::ToString(const StompError& error)
 {
     static const auto undefinedError {std::string(
-        gStompCommandStrings.left.at(StompError::kUndefinedError)
+        gStompErrorStrings.left.at(StompError::kUndefinedError)
     )};
-    auto errorIt {gStompCommandStrings.left.find(error)};
-    if (errorIt == gStompCommandStrings.left.end()) {
+    auto errorIt {gStompErrorStrings.left.find(error)};
+    if (errorIt == gStompErrorStrings.left.end()) {
         return undefinedError;
     }
     return std::string(errorIt->second);
@@ -206,14 +206,14 @@ std::string NetworkMonitor::ToString(const StompError& error)
 static const StompError& StringToError(const std::string_view error)
 {
     static const auto invalidError {StompError::kUndefinedError};
-    auto errorIt {gStompCommandStrings.right.find(error)};
-    if (errorIt == gStompCommandStrings.right.end()) {
+    auto errorIt {gStompErrorStrings.right.find(error)};
+    if (errorIt == gStompErrorStrings.right.end()) {
         return invalidError;
     }
     return errorIt->second;
 }
 
-// STOMP frame public methods
+// StompFrame — Public methods
 
 StompFrame::StompFrame() = default;
 
@@ -263,7 +263,7 @@ StompFrame::StompFrame(
     ec = ParseAndValidateFrame(plain_);
 }
 
-// Copy the original plain-text frame and re-parse it.
+// Copy the original plain-text frame and re-parse it
 StompFrame::StompFrame(const StompFrame& other)
 {
     plain_ = other.plain_;
@@ -335,6 +335,7 @@ StompError StompFrame::ParseFrame(const std::string_view frame)
     static const char colon {':'};
     static const char newLine {'\n'};
 
+    // Command
     size_t commandStart {0};
     size_t commandEnd {plain.find(newLine, commandStart)};
     if (commandEnd == std::string::npos) {
@@ -343,9 +344,10 @@ StompError StompFrame::ParseFrame(const std::string_view frame)
     auto command {ToCommand(
         plain.substr(commandStart, commandEnd - commandStart)
     )};
-    if ( command == StompCommand::kInvalid) {
+    if (command == StompCommand::kInvalid) {
         return StompError::kParsingUnrecognizedCommand;
     }
+
     // Headers
     size_t headerLineStart {commandEnd + 1};
     Headers headers {};
@@ -379,6 +381,8 @@ StompError StompFrame::ParseFrame(const std::string_view frame)
                 std::move(value))
             );
         }
+
+        // Prepare for next line;
         headerLineStart = valueEnd + 1;
     }
 
@@ -498,4 +502,3 @@ StompError StompFrame::ValidateFrame()
 
     return StompError::kOk;
 }
-
