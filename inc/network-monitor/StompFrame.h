@@ -17,6 +17,7 @@ enum class StompCommand {
     kBegin,
     kCommit,
     kConnect,
+    kConnected,
     kDisconnect,
     kError,
     kMessage,
@@ -30,7 +31,7 @@ enum class StompCommand {
 
 /*! \brief Print operator for the stompCommand class
  */
-std::ostream operator<<(std::ostream& os, const StompCommand& command);
+std::ostream& operator<<(std::ostream& os, const StompCommand& command);
 
 /*! \brief Convert StompCommand to string
  */
@@ -63,7 +64,7 @@ enum class StompHeader {
 
 /*! \brief Print operator for the StompHeader class
  */
-std::ostream operator<<(std::ostream& os, const StompHeader& header);
+std::ostream& operator<<(std::ostream& os, const StompHeader& header);
 
 /*! \brief Convert StompHeader to string
  */
@@ -93,7 +94,7 @@ enum class StompError {
 
 /*! \brief Print operator for the StompError class
  */
-std::ostream operator<<(std::ostream& os, const StompError& error);
+std::ostream& operator<<(std::ostream& os, const StompError& error);
 
 /*! \brief Convert StompError to string
  */
@@ -130,6 +131,15 @@ public:
         std::string&& frame
     );
 
+    /*! \brief Construct the STOMP frame from its individual components.
+     */
+    StompFrame(
+        StompError& ec,
+        const StompCommand& command,
+        const std::unordered_map<StompHeader, std::string>& headers = {},
+        const std::string& body = ""
+    );
+    
     /*! \brief Copy constructor.
      */
     StompFrame(const StompFrame& other);
@@ -176,11 +186,11 @@ private:
     std::string_view body_ {};
 
     // Helper function to parse and validate a STOMP frame
-    StompError ParseAndValidateFrame(const std::strig_view& frame);
+    StompError ParseAndValidateFrame(const std::string_view frame);
 
     // Parse string_view into a separate items: 
     // A command, a map of headers and a body view
-    StompError ParseFrame(const std::string_view& frame);
+    StompError ParseFrame(const std::string_view frame);
 
     // Validate the STOMP frame based on the parsed date
     // (command, headers, map, body view)
