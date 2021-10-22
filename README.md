@@ -1,3 +1,27 @@
+# Required dependencies 
+
+* CMake
+```
+$ sudo snap install cmake
+```
+* Conan 
+```
+$ pip install conan
+```
+* Spdlog
+```
+$ sudo apt-get install libspdlog-dev
+```
+
+# Get started
+```
+$ git clone --recurse-submodules https://github.com/Agnieszka1994/Live-Transport-Network-Monitor
+    && cd ./Live-Transport-Network-Monitor/ \
+    && ./bin/00-installDependencies.sh \
+    && ./bin/11-build.sh
+```
+
+
 # Live Transport Network Monitor
 The London Transport Company wants to optimize the passenger load on their Underground lines at peak times.
 
