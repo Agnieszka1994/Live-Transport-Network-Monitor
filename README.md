@@ -16,7 +16,7 @@ $ sudo apt-get install libspdlog-dev
 # Get started
 ```
 $ git clone --recurse-submodules https://github.com/Agnieszka1994/Live-Transport-Network-Monitor
-    && cd ./Live-Transport-Network-Monitor/ \
+$ cd ./Live-Transport-Network-Monitor/ \
     && ./bin/00-installDependencies.sh \
     && ./bin/11-build.sh
 ```
