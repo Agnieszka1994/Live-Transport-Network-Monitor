@@ -2,13 +2,17 @@ cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 
 project(network-monitor)
 
+# Add the local CMake modules folder to the CMake search path.
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 # Dependencies
 # If dependencies are managed with conan, we set the CMake module path (where
 # CMake looks for dependencies) to the current build folder.
 if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/conaninfo.txt)
-    set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_BINARY_DIR})
+    list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 find_package(Boost 1.74 REQUIRED COMPONENTS system unit_test_framework)
+find_package(Filesystem REQUIRED)
 find_package(CURL REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(OpenSSL REQUIRED)   
@@ -68,6 +72,7 @@ target_link_libraries(network-monitor-tests
     PRIVATE
         network-monitor
         Boost::Boost
+        std::filesystem
         nlohmann_json::nlohmann_json
         OpenSSL::OpenSSL
         spdlog::spdlog
