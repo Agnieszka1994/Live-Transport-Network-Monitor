@@ -1,4 +1,8 @@
+#ifndef WEBSOCKET_CLIENT_FILE_DOWNLOADER_H
+#define WEBSOCKET_CLIENT_FILE_DOWNLOADER_H
+
 #include <nlohmann/json.hpp>
+
 #include <filesystem>
 #include <string>
 
@@ -26,3 +30,5 @@ nlohmann::json ParseJsonFile(
 );
 
 } // namespace NetworkMonitor
+
+#endif // WEBSOCKET_CLIENT_FILE_DOWNLOADER_H

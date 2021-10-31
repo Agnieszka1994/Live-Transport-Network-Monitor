@@ -2,13 +2,16 @@
 #define NETWORK_MONITOR_STOMP_CLIENT_H
 
 #include <network-monitor/StompFrame.h>
+
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
+
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -59,7 +62,7 @@ public:
      *
      *  \param url      The URL of the server.
      *  \param endpoint The endpoint on the server to connect to.
-     *                  Example: echo.websocket.org/<endpoint>
+     *                  Example: ltnm.learncppthroughprojects.com/<endpoint>
      *  \param port     The port on the server.
      *  \param ioc      The io_context object. The user takes care of calling
      *                  ioc.run().
@@ -197,6 +200,8 @@ public:
         };
 
         // Assemble the SUBSCRIBE frame.
+        // We use the subscription ID to also request a receipt, so the server
+        // will confirm if we are subscribed.
         StompError error {};
         StompFrame frame {
             error,
@@ -233,11 +238,16 @@ public:
     }
 
 private:
-
+    // This strand handles all the STOMP subscription messages. These operations
+    // are decoupled from the Websocket operations.
+    // We leave it uninitialized because it does not support a default
+    // constructor.
     boost::asio::strand<boost::asio::io_context::executor_type> context_;
 
     std::string url_ {};
 
+    // We leave this uninitialized because it does not support a default
+    // constructor.
     WsClient ws_;
 
     std::function<void (StompClientError)> onConnect_ {nullptr};
@@ -257,10 +267,9 @@ private:
         )> onMessage {nullptr};
     };
 
-    // Store subscriptions in a map to retrieve the message
+    // We store subscriptions in a map so we can retrieve the message
     // handler for the right subscription when a message arrives.
     std::unordered_map<std::string, Subscription> subscriptions_ {};
-
 
     void OnWsConnect(
         boost::system::error_code ec
@@ -268,7 +277,7 @@ private:
     {
         using Error = StompClientError;
 
-        // Cannot continue if the connection was not established correctly.
+        // We cannot continue if the connection was not established correctly.
         if (ec) {
             spdlog::error("StompClient: Could not connect to server: {}",
                           ec.message());
@@ -320,6 +329,9 @@ private:
         boost::system::error_code ec
     )
     {
+        // If we got here, it only means that we correctly sent the STOMP
+        // frame, not that we are authenticated. OnWsMessage is the function
+        // that handles the response from the server.
         if (ec) {
             spdlog::error("StompClient: Could not send STOMP frame: {}",
                           ec.message());
@@ -340,7 +352,8 @@ private:
         Subscription&& subscription
     )
     {
-        // SUBSCRIBE command send succesfully
+        // At this stage we can only know if we successfully sent the SUBSCRIBE
+        // command, but not if our subscription was acknowledged.
         if (!ec) {
             // Save the subscription.
             subscriptions_.emplace(
@@ -477,7 +490,7 @@ private:
         StompFrame&& frame
     )
     {
-        // Does not handle errors, only prints a message.
+        // At the moment we do not handle errors, we only print a message.
         spdlog::error("StompClient: The STOMP server returned an error: {}",
                       frame.GetBody());
     }
@@ -534,6 +547,8 @@ private:
     )
     {
         // Find the subscription.
+        // When we send the SUBSCRIBE frame, we request a receipt with the same
+        // ID of the subscription so that it's easier to retrieve it here.
         auto subscriptionId {frame.GetHeaderValue(StompHeader::kReceiptId)};
         auto subscriptionIt {subscriptions_.find(std::string(subscriptionId))};
         if (subscriptionIt == subscriptions_.end()) {

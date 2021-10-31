@@ -29,11 +29,11 @@ enum class StompCommand {
     kUnsubscribe,
 };
 
-/*! \brief Print operator for the stompCommand class
+/*! \brief Print operator for the `StompCommand` class.
  */
 std::ostream& operator<<(std::ostream& os, const StompCommand& command);
 
-/*! \brief Convert StompCommand to string
+/*! \brief Convert `StompCommand` to string.
  */
 std::string ToString(const StompCommand& command);
 
@@ -59,18 +59,24 @@ enum class StompHeader {
     kSubscription,
     kTransaction,
     kServer,
-    kVersion
+    kVersion,
 };
 
-/*! \brief Print operator for the StompHeader class
+/*! \brief Print operator for the `StompHeader` class.
  */
 std::ostream& operator<<(std::ostream& os, const StompHeader& header);
 
-/*! \brief Convert StompHeader to string
+/*! \brief Convert `StompHeader` to string.
  */
 std::string ToString(const StompHeader& header);
 
 /*! \brief Error codes for the STOMP protocol
+ *
+ * The error codes in this enum cover:
+ * - Parsing errors, which are errors in the STOMP frame format.
+ * - Validation errors, which occur on formally correct STOMP frames where the
+ *   headers or body do not match the protocol requirements for the STOMP
+ *   command.
  */
 enum class StompError {
     kOk = 0,
@@ -92,11 +98,11 @@ enum class StompError {
     kValidationMissingHeader,
 };
 
-/*! \brief Print operator for the StompError class
+/*! \brief Print operator for the `StompError` class.
  */
 std::ostream& operator<<(std::ostream& os, const StompError& error);
 
-/*! \brief Convert StompError to string
+/*! \brief Convert `StompError` to string.
  */
 std::string ToString(const StompError& error);
 
@@ -104,7 +110,7 @@ std::string ToString(const StompError& error);
  */
 class StompFrame {
 public:
-
+    // Type aliases
     using Headers = std::unordered_map<StompHeader, std::string_view>;
 
     /*! \brief Default constructor. Corresponds to an empty, invalid STOMP
@@ -139,7 +145,7 @@ public:
         const std::unordered_map<StompHeader, std::string>& headers = {},
         const std::string& body = ""
     );
-    
+
     /*! \brief Copy constructor.
      */
     StompFrame(const StompFrame& other);
@@ -181,19 +187,21 @@ public:
 private:
     std::string plain_ {};
 
+    // These are mostly views into the plain data; the storage overhead is
+    // limited.
     StompCommand command_ {StompCommand::kInvalid};
     Headers headers_ {};
     std::string_view body_ {};
 
-    // Helper function to parse and validate a STOMP frame
+    // Helper function to parse and validate a STOMP frame.
     StompError ParseAndValidateFrame(const std::string_view frame);
 
-    // Parse string_view into a separate items: 
-    // A command, a map of headers and a body view
+    // This function parses a string view into separate items: A command, a map
+    // of headers, a body view.
     StompError ParseFrame(const std::string_view frame);
 
-    // Validate the STOMP frame based on the parsed date
-    // (command, headers, map, body view)
+    // This function validates the STOMP frame based on the parsed data
+    // (command, headers map, body view).
     StompError ValidateFrame();
 };
 

@@ -1,4 +1,6 @@
 #include <network-monitor/FileDownloader.h>
+#include <nlohmann/json.hpp>
+
 #include <curl/curl.h>
 
 #include <filesystem>
@@ -7,26 +9,26 @@
 #include <string>
 
 bool NetworkMonitor::DownloadFile(
-    const std:: string& fileUrl,
+    const std::string& fileUrl,
     const std::filesystem::path& destination,
     const std::filesystem::path& caCertFile
 )
 {
-    // Initialize CURL
-    CURL* curl = {curl_easy_init()};
+    // Initalize curl.
+    CURL* curl {curl_easy_init()};
     if (curl == nullptr) {
         return false;
     }
 
-    // Open the file
+    // Open the file.
     std::FILE* fp {fopen(destination.string().c_str(), "wb")};
     if (fp == nullptr) {
-        // Clean up all program paths
+        // Remember to clean up in all program paths.
         curl_easy_cleanup(curl);
         return false;
     }
 
-    // Configure curl
+    // Configure curl.
     curl_easy_setopt(curl, CURLOPT_URL, fileUrl.c_str());
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_CAINFO, caCertFile.string().c_str());
@@ -34,11 +36,11 @@ bool NetworkMonitor::DownloadFile(
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
-    // Perform requests
+    // Perform the request.
     CURLcode res = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
 
-    // Close the file 
+    // Close the file.
     fclose(fp);
 
     return res == CURLE_OK;
@@ -56,7 +58,7 @@ nlohmann::json NetworkMonitor::ParseJsonFile(
         std::ifstream file {source};
         file >> parsed;
     } catch (...) {
-        // Funciton will return an empty object
+        // Will return an empty object.
     }
     return parsed;
 }

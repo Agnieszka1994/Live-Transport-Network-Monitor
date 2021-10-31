@@ -1,7 +1,10 @@
 #include "network-monitor/TransportNetwork.h"
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 using NetworkMonitor::Id;
@@ -11,28 +14,45 @@ using NetworkMonitor::Route;
 using NetworkMonitor::Station;
 using NetworkMonitor::TransportNetwork;
 
-// Station - public methods
+// Station — Public methods
 
 bool Station::operator==(const Station& other) const
 {
     return id == other.id;
 }
 
-// Route - public methods
+// Route — Public methods
 
 bool Route::operator==(const Route& other) const
 {
     return id == other.id;
 }
 
-// Line - public methods
+// Line — Public methods
 
 bool Line::operator==(const Line& other) const
 {
     return id == other.id;
 }
 
-// TransportNetwork - public methods
+// PassengerEvent — Free functions
+
+void NetworkMonitor::from_json(
+    const nlohmann::json& src,
+    PassengerEvent& dst
+)
+{
+    dst.stationId = src.at("station_id").get<std::string>();
+    dst.type = src.at("passenger_event").get<std::string>() == "in" ?
+        PassengerEvent::Type::In : PassengerEvent::Type::Out;
+
+    // We exclude the final 'Z' when parsing the datetime string.
+    auto datetimeZ {src.at("datetime").get<std::string>()};
+    auto datetime {datetimeZ.substr(0, datetimeZ.size() - 1)};
+    dst.timestamp = boost::posix_time::from_iso_extended_string(datetime);
+}
+
+// TransportNetwork — Public methods
 
 TransportNetwork::TransportNetwork() = default;
 
@@ -60,25 +80,24 @@ bool TransportNetwork::FromJson(
 {
     bool ok {true};
 
-    // Add all stations
+    // First, add all the stations.
     for (auto&& stationJson: src.at("stations")) {
         Station station {
             std::move(stationJson.at("station_id").get<std::string>()),
             std::move(stationJson.at("name").get<std::string>()),
         };
-
         ok &= AddStation(station);
         if (!ok) {
-            throw std::runtime_error("Could not add atation " + station.id);
+            throw std::runtime_error("Could not add station " + station.id);
         }
     }
 
-    // Add lines
+    // Then, add the lines.
     for (auto&& lineJson: src.at("lines")) {
         Line line {
             std::move(lineJson.at("line_id").get<std::string>()),
             std::move(lineJson.at("name").get<std::string>()),
-            {}, // we start with no routes
+            {}, // We will add the routes shortly.
         };
         line.routes.reserve(lineJson.at("routes").size());
         for (auto&& routeJson: lineJson.at("routes")) {
@@ -98,7 +117,8 @@ bool TransportNetwork::FromJson(
             throw std::runtime_error("Could not add line " + line.id);
         }
     }
-    // Add travel times
+
+    // Finally, set the travel times.
     for (auto&& travelTimeJson: src.at("travel_times")) {
         ok &= SetTravelTime(
             std::move(travelTimeJson.at("start_station_id").get<std::string>()),
@@ -111,22 +131,23 @@ bool TransportNetwork::FromJson(
 }
 
 bool TransportNetwork::AddStation(
-        const Station& station
+    const Station& station
 )
 {
-    // Prevents adding a station that is already in the network
-    if(GetStation(station.id) != nullptr) {
+    // Cannot add a station that is already in the network.
+    if (GetStation(station.id) != nullptr) {
         return false;
     }
 
-    // Create a new station node and add it to the map
-    auto node {std::make_shared<GraphNode>(GraphNode{
+    // Create a new station node and add it to the map.
+    auto node {std::make_shared<GraphNode>(GraphNode {
         station.id,
         station.name,
-        0, // no passengers
-        {} // no edges
+        0, // We start with no passengers.
+        {} // We start with no edges.
     })};
     stations_.emplace(station.id, std::move(node));
+
     return true;
 }
 
@@ -134,28 +155,29 @@ bool TransportNetwork::AddLine(
     const Line& line
 )
 {
-    // Prevents adding a line that is alread in the network
-    if (GetLine(line.id) != nullptr){
+    // Cannot add a line that is already in the network.
+    if (GetLine(line.id) != nullptr) {
         return false;
     }
 
-    // Create the internal version of the line
+    // Create the internal version of the line.
     auto lineInternal {std::make_shared<LineInternal>(LineInternal {
         line.id,
         line.name,
-        {} // we start with no routes
+        {} // We will add routes shortly.
     })};
 
-    // Add the routes to the line
+    // Add the routes to the line.
     for (const auto& route: line.routes) {
-        bool isRouteAdded {AddRouteToLine(route, lineInternal)};
-        if (!isRouteAdded) {
+        bool ok {AddRouteToLine(route, lineInternal)};
+        if (!ok) {
             return false;
         }
     }
 
-    // Only add the line to the map if there are no errors
+    // Only add the line to the map when we are sure that there were no errors.
     lines_.emplace(line.id, std::move(lineInternal));
+
     return true;
 }
 
@@ -163,7 +185,7 @@ bool TransportNetwork::RecordPassengerEvent(
     const PassengerEvent& event
 )
 {
-    // Find the station
+    // Find the station.
     const auto stationNode {GetStation(event.stationId)};
     if (stationNode == nullptr) {
         return false;
@@ -171,14 +193,14 @@ bool TransportNetwork::RecordPassengerEvent(
 
     // Increase or decrease the passenger count at the station.
     switch (event.type) {
-    case PassengerEvent::Type::In:
-        ++stationNode->passengerCount;
-        return true;
-    case PassengerEvent::Type::Out:
-        --stationNode->passengerCount;
-        return true;
-    default:
-        return false;
+        case PassengerEvent::Type::In:
+            ++stationNode->passengerCount;
+            return true;
+        case PassengerEvent::Type::Out:
+            --stationNode->passengerCount;
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -186,10 +208,11 @@ long long int TransportNetwork::GetPassengerCount(
     const Id& station
 ) const
 {
-    // Find the station
+    // Find the station.
     const auto stationNode {GetStation(station)};
     if (stationNode == nullptr) {
-        throw std::runtime_error("Could not find station in the network: " + station);
+        throw std::runtime_error("Could not find station in the network: " +
+                                 station);
     }
     return stationNode->passengerCount;
 }
@@ -198,25 +221,28 @@ std::vector<Id> TransportNetwork::GetRoutesServingStation(
     const Id& station
 ) const
 {
-    // Find the station
+    // Find the station.
     const auto stationNode {GetStation(station)};
     if (stationNode == nullptr) {
         return {};
     }
 
     std::vector<Id> routes {};
-    
-    // Iterate over all edges departing from the node.
-    // Each edge corresponds to one routeserving the station
+
+    // Iterate over all edges departing from the node. Each edge corresponds to
+    // one route serving the station.
     const auto& edges {stationNode->edges};
     for (const auto& edge: edges) {
         routes.push_back(edge->route->id);
     }
 
-    
-    // Cover the corner case: the end station of a route does not
-    // have any edge containing that route
-    // We need to check if our station is the end station of any route
+    // The previous loop misses a corner case: The end station of a route does
+    // not have any edge containing that route, because we only track the routes
+    // that *leave from*, not *arrive to* a certain station.
+    // We need to loop over all line routes to check if our station is the end
+    // stop of any route.
+    // FIXME: In the worst case, we are iterating over all routes for all
+    //        lines in the network. We may want to optimize this.
     for (const auto& [_, line]: lines_) {
         for (const auto& [_, route]: line->routes) {
             const auto& endStop {route->stops[route->stops.size() - 1]};
@@ -235,18 +261,17 @@ bool TransportNetwork::SetTravelTime(
     const unsigned int travelTime
 )
 {
-    // Find the stations
+    // Find the stations.
     const auto stationANode {GetStation(stationA)};
     const auto stationBNode {GetStation(stationB)};
     if (stationANode == nullptr || stationBNode == nullptr) {
         return false;
     }
 
-    // Search all edges connecting A to B, and B to A
+    // Search all edges connecting A -> B and B -> A.
+    // We use a lambda to avoid code duplication.
     bool foundAnyEdge {false};
-
-    // Lambda to avoid code duplication
-    auto setTravelTime {[&foundAnyEdge, &travelTime](auto from, auto to){
+    auto setTravelTime {[&foundAnyEdge, &travelTime](auto from, auto to) {
         for (auto& edge: from->edges) {
             if (edge->nextStop == to) {
                 edge->travelTime = travelTime;
@@ -272,7 +297,10 @@ unsigned int TransportNetwork::GetTravelTime(
         return 0;
     }
 
-    // Checking all connections from A to B and from B ot A
+    // Check if there is an edge A -> B, then B -> A.
+    // We can return early as soon as we find a match: Wwe know that the travel
+    // time from A to B is the same as the travel time from B to A, across all
+    // routes.
     for (const auto& edge: stationANode->edges) {
         if (edge->nextStop == stationBNode) {
             return edge->travelTime;
@@ -320,29 +348,34 @@ unsigned int TransportNetwork::GetTravelTime(
             return travelTime;
         }
 
-        // Accummulate the travel time since we found station A
+        // Accummulate the travel time since we found station A..
         if (foundA) {
             auto edgeIt {stop->FindEdgeForRoute(routeInternal)};
             if (edgeIt == stop->edges.end()) {
-
+                // Unexpected: The station should definitely have an edge for
+                //             this route.
                 return 0;
             }
             travelTime += (*edgeIt)->travelTime;
         }
     }
+
+    // If we got here, we didn't find station A, B, or both.
     return 0;
 }
 
-// TransportNetwork — private methods
+// TransportNetwork — Private methods
 
-std::vector<std::shared_ptr<TransportNetwork::GraphEdge>>::const_iterator TransportNetwork::GraphNode::FindEdgeForRoute(
+std::vector<
+    std::shared_ptr<TransportNetwork::GraphEdge>
+>::const_iterator TransportNetwork::GraphNode::FindEdgeForRoute(
     const std::shared_ptr<RouteInternal>& route
 ) const
 {
     return std::find_if(
         edges.begin(),
         edges.end(),
-        [&route](const auto& edge){
+        [&route](const auto& edge) {
             return edge->route == route;
         }
     );
@@ -376,7 +409,7 @@ std::shared_ptr<TransportNetwork::RouteInternal> TransportNetwork::GetRoute(
 ) const
 {
     auto line {GetLine(lineId)};
-    if (line == nullptr){
+    if (line == nullptr) {
         return nullptr;
     }
     const auto& routes {line->routes};
@@ -392,12 +425,12 @@ bool TransportNetwork::AddRouteToLine(
     const std::shared_ptr<LineInternal>& lineInternal
 )
 {
-    // Prevents adding a route that is laready in the network
+    // Cannot add a line route that is already in the network.
     if (lineInternal->routes.find(route.id) != lineInternal->routes.end()) {
         return false;
     }
 
-    // Get the list of stations.
+    // We first gather the list of stations.
     // All stations must already be in the network.
     std::vector<std::shared_ptr<GraphNode>> stops {};
     stops.reserve(route.stops.size());
@@ -409,14 +442,14 @@ bool TransportNetwork::AddRouteToLine(
         stops.push_back(station);
     }
 
-    // Create the route
+    // Create the route.
     auto routeInternal {std::make_shared<RouteInternal>(RouteInternal {
         route.id,
         lineInternal,
         std::move(stops)
     })};
 
-    // Walk the station nodes to add an edge for the route
+    // Walk the station nodes to add an edge for the route.
     for (size_t idx {0}; idx < routeInternal->stops.size() - 1; ++idx) {
         const auto& thisStop {routeInternal->stops[idx]};
         const auto& nextStop {routeInternal->stops[idx + 1]};
@@ -427,7 +460,7 @@ bool TransportNetwork::AddRouteToLine(
         }));
     }
 
-    // Add the route to the line
+    // Finally, add the route to the line.
     lineInternal->routes[route.id] = std::move(routeInternal);
 
     return true;

@@ -1,6 +1,7 @@
 #include <network-monitor/StompClient.h>
 
 #include <boost/bimap.hpp>
+
 #include <initializer_list>
 #include <ostream>
 #include <string>
@@ -21,17 +22,28 @@ static boost::bimap<L, R> MakeBimap(
 
 static const auto gStompClientErrorStrings {
     MakeBimap<StompClientError, std::string_view>({
-        {StompClientError::kOk                                , "Ok"                                },
-        {StompClientError::kUndefinedError                    , "UndefinedError"                    },
-        {StompClientError::kCouldNotCloseWebsocketConnection  , "CouldNotCloseWebsocketConnection"  },
-        {StompClientError::kCouldNotConnectToWebsocketServer  , "CouldNotConnectToWebsocketServer"  },
-        {StompClientError::kCouldNotParseMessageAsStompFrame  , "CouldNotParseMessageAsStompFrame"  },
-        {StompClientError::kCouldNotSendStompFrame            , "CouldNotSendStompFrame"            },
-        {StompClientError::kCouldNotSendSubscribeFrame        , "CouldNotSendSubscribeFrame"        },
-        {StompClientError::kUnexpectedCouldNotCreateValidFrame, "UnexpectedCouldNotCreateValidFrame"},
-        {StompClientError::kUnexpectedMessageContentType      , "UnexpectedMessageContentType"      },
-        {StompClientError::kUnexpectedSubscriptionMismatch    , "UnexpectedSubscriptionMismatch"    },
-        {StompClientError::kWebsocketServerDisconnected       , "WebsocketServerDisconnected"       },
+        {StompClientError::kOk                                ,
+                           "Ok"                                },
+        {StompClientError::kUndefinedError                    ,
+                           "UndefinedError"                    },
+        {StompClientError::kCouldNotCloseWebsocketConnection  ,
+                           "CouldNotCloseWebsocketConnection"  },
+        {StompClientError::kCouldNotConnectToWebsocketServer  ,
+                           "CouldNotConnectToWebsocketServer"  },
+        {StompClientError::kCouldNotParseMessageAsStompFrame  ,
+                           "CouldNotParseMessageAsStompFrame"  },
+        {StompClientError::kCouldNotSendStompFrame            ,
+                           "CouldNotSendStompFrame"            },
+        {StompClientError::kCouldNotSendSubscribeFrame        ,
+                           "CouldNotSendSubscribeFrame"        },
+        {StompClientError::kUnexpectedCouldNotCreateValidFrame,
+                           "UnexpectedCouldNotCreateValidFrame"},
+        {StompClientError::kUnexpectedMessageContentType      ,
+                           "UnexpectedMessageContentType"      },
+        {StompClientError::kUnexpectedSubscriptionMismatch    ,
+                           "UnexpectedSubscriptionMismatch"    },
+        {StompClientError::kWebsocketServerDisconnected       ,
+                           "WebsocketServerDisconnected"       },
     })
 };
 

@@ -1,5 +1,7 @@
 #include <network-monitor/StompFrame.h>
+
 #include <boost/bimap.hpp>
+
 #include <charconv>
 #include <initializer_list>
 #include <ostream>
@@ -154,23 +156,40 @@ static const StompHeader& ToHeader(const std::string_view header)
 
 static const auto gStompErrorStrings {
     MakeBimap<StompError, std::string_view>({
-        {StompError::kOk                                    , "Ok"                                    },
-        {StompError::kUndefinedError                        , "UndefinedError"                        },
-        {StompError::kParsingEmptyHeaderValue               , "ParsingEmptyHeaderValue"               },
-        {StompError::kParsingContentLengthExceedsFrameLength, "ParsingContentLengthExceedsFrameLength"},
-        {StompError::kParsingInvalidContentLength           , "ParsingInvalidContentLength"           },
-        {StompError::kParsingJunkAfterBody                  , "ParsingJunkAfterBody"                  },
-        {StompError::kParsingMissingBlankLineAfterHeaders   , "ParsingMissingBlankLineAfterHeaders"   },
-        {StompError::kParsingMissingColonInHeader           , "ParsingMissingColonInHeader"           },
-        {StompError::kParsingMissingEolAfterCommand         , "ParsingMissingEolAfterCommand"         },
-        {StompError::kParsingMissingEolAfterHeaderValue     , "ParsingMissingEolAfterHeaderValue"     },
-        {StompError::kParsingMissingNullInBody              , "ParsingMissingNullInBody"              },
-        {StompError::kParsingUnrecognizedCommand            , "ParsingUnrecognizedCommand"            },
-        {StompError::kParsingUnrecognizedHeader             , "ParsingUnrecognizedHeader"             },
-        {StompError::kValidationContentLengthMismatch       , "ValidationContentLengthMismatch"       },
-        {StompError::kValidationInvalidCommand              , "ValidationInvalidCommand"              },
-        {StompError::kValidationInvalidContentLength        , "ValidationInvalidContentLength"        },
-        {StompError::kValidationMissingHeader               , "ValidationMissingHeader"               },
+        {StompError::kOk                                    ,
+                     "Ok"                                    },
+        {StompError::kUndefinedError                        ,
+                     "UndefinedError"                        },
+        {StompError::kParsingEmptyHeaderValue               ,
+                     "ParsingEmptyHeaderValue"               },
+        {StompError::kParsingContentLengthExceedsFrameLength,
+                     "ParsingContentLengthExceedsFrameLength"},
+        {StompError::kParsingInvalidContentLength           ,
+                     "ParsingInvalidContentLength"           },
+        {StompError::kParsingJunkAfterBody                  ,
+                     "ParsingJunkAfterBody"                  },
+        {StompError::kParsingMissingBlankLineAfterHeaders   ,
+                     "ParsingMissingBlankLineAfterHeaders   "},
+        {StompError::kParsingMissingColonInHeader           ,
+                     "ParsingMissingColonInHeader"           },
+        {StompError::kParsingMissingEolAfterCommand         ,
+                     "ParsingMissingEolAfterCommand"         },
+        {StompError::kParsingMissingEolAfterHeaderValue     ,
+                     "ParsingMissingEolAfterHeaderValue"     },
+        {StompError::kParsingMissingNullInBody              ,
+                     "ParsingMissingNullInBody"              },
+        {StompError::kParsingUnrecognizedCommand            ,
+                     "ParsingUnrecognizedCommand"            },
+        {StompError::kParsingUnrecognizedHeader             ,
+                     "ParsingUnrecognizedHeader"             },
+        {StompError::kValidationContentLengthMismatch       ,
+                     "ValidationContentLengthMismatch"       },
+        {StompError::kValidationInvalidCommand              ,
+                     "ValidationInvalidCommand"              },
+        {StompError::kValidationInvalidContentLength        ,
+                     "ValidationInvalidContentLength"        },
+        {StompError::kValidationMissingHeader               ,
+                     "ValidationMissingHeader"               },
     })
 };
 
@@ -244,7 +263,7 @@ StompFrame::StompFrame(
 {
     using namespace std::string_literals;
 
-    // Construct the frame as a string
+    // Construct the frame as a string.
     std::string plain {""};
     plain += NetworkMonitor::ToString(command);
     plain += "\n";
@@ -259,11 +278,13 @@ StompFrame::StompFrame(
     plain += "\0"s;
     plain_ = std::move(plain);
 
-    // Re-parse the frame to make sure it is valid
+    // This may be wasteful, but we re-parse the frame to make sure it is a
+    // valid one. We may optimize this later.
     ec = ParseAndValidateFrame(plain_);
 }
 
-// Copy the original plain-text frame and re-parse it
+// The copy constructor cannot copy the string views. Instead, we copy the
+// original plain-text frame and re-parse it.
 StompFrame::StompFrame(const StompFrame& other)
 {
     plain_ = other.plain_;
@@ -272,6 +293,8 @@ StompFrame::StompFrame(const StompFrame& other)
 
 StompFrame::StompFrame(StompFrame&& other) = default;
 
+// The copy assignment operator cannot copy the string views. Instead, we copy
+// the original plain-text frame and re-parse it.
 StompFrame& StompFrame::operator=(const StompFrame& other)
 {
     if (this != &other) {
@@ -394,12 +417,13 @@ StompError StompFrame::ParseFrame(const std::string_view frame)
     }
 
     // Body
+    // Everything else that's left is potentially part of the body.
     size_t bodyStart {newLineBeforeBody + 1};
     size_t bodyEnd {0}; // The NULL octet
     size_t bodyLength {0};
     auto contentLengthIt {headers.find(StompHeader::kContentLength)};
     if (contentLengthIt != headers.end()) {
-        // If the content-length header is present, read the
+        // If the content-length header is present, we need to read the
         // specified number of bytes.
         auto ok {StoI(contentLengthIt->second, bodyLength)};
         if (!ok) {
@@ -416,7 +440,7 @@ StompError StompFrame::ParseFrame(const std::string_view frame)
             return StompError::kParsingMissingNullInBody;
         }
     } else {
-        // If the content-length header is not present, look for the
+        // If the content-length header is not present, we need to look for the
         // first NULL octet as a body delimiter.
         bodyEnd = plain.find(null, bodyStart);
         if (bodyEnd == std::string::npos) {
@@ -437,7 +461,7 @@ StompError StompFrame::ParseFrame(const std::string_view frame)
     return StompError::kOk;
 }
 
-// Validate the headers in the frame based on the protocol specification.
+// We validate the headers in the frame based on the protocol specification.
 StompError StompFrame::ValidateFrame()
 {
     bool hasAllHeaders {true};

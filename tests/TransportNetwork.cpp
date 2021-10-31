@@ -1,19 +1,23 @@
-#include <network-monitor/TransportNetwork.h>
 #include <network-monitor/FileDownloader.h>
+#include <network-monitor/TransportNetwork.h>
+
 #include <boost/test/unit_test.hpp>
+
+#include <nlohmann/json.hpp>
 
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 using NetworkMonitor::Id;
 using NetworkMonitor::Line;
 using NetworkMonitor::PassengerEvent;
+using NetworkMonitor::ParseJsonFile;
 using NetworkMonitor::Route;
 using NetworkMonitor::Station;
 using NetworkMonitor::TransportNetwork;
-using NetworkMonitor::ParseJsonFile;
 
 BOOST_AUTO_TEST_SUITE(network_monitor);
 
@@ -207,6 +211,58 @@ BOOST_AUTO_TEST_CASE(duplicate)
     BOOST_CHECK(!ok);
 }
 
+BOOST_AUTO_TEST_CASE(missing_stations)
+{
+    TransportNetwork nw {};
+    bool ok {false};
+
+    // Define a line with 1 route.
+    // route0: 0 ---> 1 ---> 2
+    Station station0 {
+        "station_000",
+        "Station Name 0",
+    };
+    Station station1 {
+        "station_001",
+        "Station Name 1",
+    };
+    Station station2 {
+        "station_002",
+        "Station Name 2",
+    };
+    Route route0 {
+        "route_000",
+        "inbound",
+        "line_000",
+        "station_000",
+        "station_002",
+        {"station_000", "station_001", "station_002"},
+    };
+    Line line {
+        "line_000",
+        "Line Name",
+        {route0},
+    };
+
+    // Expected fail: No stations in the network.
+    ok = nw.AddLine(line);
+    BOOST_CHECK(!ok);
+
+    // Expected fail: We add all stations except one.
+    ok = true;
+    ok &= nw.AddStation(station0);
+    ok &= nw.AddStation(station1);
+    BOOST_REQUIRE(ok);
+    ok = nw.AddLine(line);
+    BOOST_CHECK(!ok);
+
+    // Expected success: We add the final station and try again.
+    ok = nw.AddStation(station2);
+    BOOST_REQUIRE(ok);
+    ok = nw.AddLine(line);
+    BOOST_CHECK(ok);
+}
+
 BOOST_AUTO_TEST_SUITE_END(); // AddLine
 
 BOOST_AUTO_TEST_SUITE(PassengerEvents);
@@ -347,6 +403,24 @@ BOOST_AUTO_TEST_CASE(basic)
     BOOST_REQUIRE_EQUAL(routes.size(), 1);
     BOOST_CHECK(routes[0] == route0.id);
     routes = nw.GetRoutesServingStation(station3.id);
+    BOOST_CHECK_EQUAL(routes.size(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(lone_station)
+{
+    TransportNetwork nw {};
+    bool ok {false};
+
+    // Add a single station.
+    Station station0 {
+        "station_000",
+        "Station Name 0",
+    };
+    ok = nw.AddStation(station0);
+    BOOST_REQUIRE(ok);
+
+    // Check the routes served.
+    auto routes {nw.GetRoutesServingStation(station0.id)};
     BOOST_CHECK_EQUAL(routes.size(), 0);
 }
 
@@ -672,4 +746,4 @@ BOOST_AUTO_TEST_SUITE_END(); // FromJson
 
 BOOST_AUTO_TEST_SUITE_END(); // class_TransportNetwork
 
-BOOST_AUTO_TEST_SUITE_END(); // websocket_client
+BOOST_AUTO_TEST_SUITE_END(); // Websocket_client
