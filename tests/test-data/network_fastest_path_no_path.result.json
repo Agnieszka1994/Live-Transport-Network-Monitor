@@ -1,0 +1,6 @@
+{
+    "start_station_id": "station_A",
+    "end_station_id": "station_B",
+    "total_travel_time": 0,
+    "steps": []
+}

@@ -1,0 +1,28 @@
+{
+    "start_station_id": "station_A",
+    "end_station_id": "station_B",
+    "total_travel_time": 10,
+    "steps": [
+        {
+            "start_station_id": "station_A",
+            "end_station_id": "station_21",
+            "line_id": "line_1",
+            "route_id": "route_1",
+            "travel_time": 8
+        },
+        {
+            "start_station_id": "station_21",
+            "end_station_id": "station_22",
+            "line_id": "line_1",
+            "route_id": "route_1",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_22",
+            "end_station_id": "station_B",
+            "line_id": "line_1",
+            "route_id": "route_1",
+            "travel_time": 1
+        }
+    ]
+}

@@ -1,8 +1,15 @@
 #include "network-monitor/TransportNetwork.h"
+
 #include <nlohmann/json.hpp>
+
+#include <boost/container_hash/hash.hpp>
+
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <memory>
+#include <queue>
+#include <unordered_map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -13,6 +20,7 @@ using NetworkMonitor::PassengerEvent;
 using NetworkMonitor::Route;
 using NetworkMonitor::Station;
 using NetworkMonitor::TransportNetwork;
+using NetworkMonitor::TravelRoute;
 
 // Station — Public methods
 
@@ -35,7 +43,26 @@ bool Line::operator==(const Line& other) const
     return id == other.id;
 }
 
-// PassengerEvent — Free functions
+// TravelRoute — Public methods
+
+bool TravelRoute::Step::operator==(const TravelRoute::Step& other) const
+{
+    return travelTime == other.travelTime &&
+        startStationId == other.startStationId &&
+        endStationId == other.endStationId &&
+        lineId == other.lineId &&
+        routeId == other.routeId;
+}
+
+bool TravelRoute::operator==(const TravelRoute& other) const
+{
+    return totalTravelTime == other.totalTravelTime &&
+        startStationId == other.startStationId &&
+        endStationId == other.endStationId &&
+        steps == other.steps;
+}
+
+// Free functions
 
 void NetworkMonitor::from_json(
     const nlohmann::json& src,
@@ -50,6 +77,61 @@ void NetworkMonitor::from_json(
     auto datetimeZ {src.at("datetime").get<std::string>()};
     auto datetime {datetimeZ.substr(0, datetimeZ.size() - 1)};
     dst.timestamp = boost::posix_time::from_iso_extended_string(datetime);
+}
+
+std::ostream& NetworkMonitor::operator<<(
+    std::ostream& os,
+    const TravelRoute& r
+)
+{
+    os << nlohmann::json(r);
+    return os;
+}
+
+void NetworkMonitor::to_json(
+    nlohmann::json& dst,
+    const TravelRoute::Step& src
+)
+{
+    dst["start_station_id"] = src.startStationId;
+    dst["end_station_id"] = src.endStationId;
+    dst["line_id"] = src.lineId;
+    dst["route_id"] = src.routeId;
+    dst["travel_time"] = src.travelTime;
+}
+
+void NetworkMonitor::from_json(
+    const nlohmann::json& src,
+    TravelRoute::Step& dst
+)
+{
+    dst.startStationId = src.at("start_station_id").get<Id>();
+    dst.endStationId = src.at("end_station_id").get<Id>();
+    dst.lineId= src.at("line_id").get<Id>();
+    dst.routeId = src.at("route_id").get<Id>();
+    dst.travelTime = src.at("travel_time").get<unsigned int>();
+}
+
+void NetworkMonitor::to_json(
+    nlohmann::json& dst,
+    const TravelRoute& src
+)
+{
+    dst["start_station_id"] = src.startStationId;
+    dst["end_station_id"] = src.endStationId;
+    dst["total_travel_time"] = src.totalTravelTime;
+    dst["steps"] = src.steps;
+}
+
+void NetworkMonitor::from_json(
+    const nlohmann::json& src,
+    TravelRoute& dst
+)
+{
+    dst.startStationId = src.at("start_station_id").get<Id>();
+    dst.endStationId = src.at("end_station_id").get<Id>();
+    dst.totalTravelTime = src.at("total_travel_time").get<unsigned int>();
+    dst.steps = src.at("steps").get<std::vector<TravelRoute::Step>>();
 }
 
 // TransportNetwork — Public methods
@@ -364,6 +446,148 @@ unsigned int TransportNetwork::GetTravelTime(
     return 0;
 }
 
+TravelRoute TransportNetwork::GetFastestTravelRoute(
+    const Id& stationAId,
+    const Id& stationBId
+) const
+{
+    // Find the stations.
+    const auto stationA {GetStation(stationAId)};
+    const auto stationB {GetStation(stationBId)};
+    if (stationA == nullptr || stationB == nullptr) {
+        return TravelRoute {};
+    }
+    spdlog::info("GetFastestTravelRoute: {} -> {}", stationA->id, stationB->id);
+
+    // Corner case: A and B are the same station.
+    if (stationA == stationB) {
+        return TravelRoute {
+            stationAId,
+            stationAId,
+            0,
+            {TravelRoute::Step {
+                stationAId,
+                stationAId,
+                {},
+                {},
+                0
+            }},
+        };
+    }
+
+    // Supporting data structures for Dijkstra's algorithm.
+    // - Distance of any station from A, through a specific route.
+    std::unordered_map<PathStop, unsigned int, PathStopHash> distFromA {};
+    distFromA[{stationA, nullptr}] = 0;
+    // - The previous stop in the shortest path.
+    std::unordered_map<PathStop, PathStop, PathStopHash> previousStop {};
+    // - The priority queue of stops to visit.
+    std::priority_queue<
+        PathStopDist,
+        std::vector<PathStopDist>,
+        PathStopDistCmp
+    > nodesToVisit;
+    nodesToVisit.push({{stationA, nullptr}, 0});
+
+    // Dijkstra's algorithm
+    while (!nodesToVisit.empty()) {
+        // Remove the node from the priority queue.
+        auto [currStop, currentDistFromA] = nodesToVisit.top();
+        const auto& currStation {currStop.node};
+        const auto& edgeToCurrStation {currStop.edge};
+        nodesToVisit.pop();
+
+        // Check if we found station B.
+        if (currStation == stationB) {
+            // We do not want to break here! We may still have some nodes in
+            // the queue that may lead to a better path to station B.
+            continue;
+        }
+
+        // Explore the neighborhood.
+        for (const auto& neighborEdge: currStation->edges) {
+            PathStop neighbor {neighborEdge->nextStop, neighborEdge};
+
+            // Calculate the distance of the neighbor from station A.
+            auto neighborDistFromA {currentDistFromA + neighborEdge->travelTime};
+            if (edgeToCurrStation != nullptr &&
+                edgeToCurrStation->route != neighborEdge->route
+            ) {
+                // We add a penalty of 5 minutes if we need to change route to
+                // get to our neighbor.
+                neighborDistFromA += 5;
+            }
+
+            // Update our records of the fastest way to get to the neighbor.
+            const auto neighborDistFromAIt {distFromA.find(neighbor)};
+            if (neighborDistFromAIt == distFromA.end()) {
+                // First time we see this neighbor.
+                distFromA[neighbor] = neighborDistFromA;
+                previousStop[neighbor] = currStop;
+                nodesToVisit.push({neighbor, neighborDistFromA});
+            } else {
+                // We already saw this neighbor, and only update our records if
+                // it's worth it.
+                if (neighborDistFromA < neighborDistFromAIt->second) {
+                    distFromA[neighbor] = neighborDistFromA;
+                    previousStop[neighbor] = currStop;
+
+                    // Note: Because there may have been a change of routes in
+                    //       the path to this neighbor, we need to re-walk the
+                    //       path from here onwards.
+                    nodesToVisit.push({neighbor, neighborDistFromA});
+                }
+            }
+        }
+    }
+
+    // Valid paths to station B.
+    std::vector<PathStopDist> pathsToB {};
+    for (const auto& [pathStop, distance]: distFromA) {
+        if (pathStop.node == stationB) {
+            pathsToB.push_back({pathStop, distance});
+        }
+    }
+
+    // Corner case: There is no valid path between A and B.
+    if (pathsToB.empty()) {
+        return TravelRoute {
+            stationAId,
+            stationBId,
+            0,
+            {},
+        };
+    }
+
+    // Sort the pathsToB vector to get the fastest path from A to B.
+    std::sort(pathsToB.begin(), pathsToB.end(), PathStopDistCmp {});
+    auto& fastestPathToB {pathsToB.back()};
+
+    // Assemble the path.
+    // Note: We go in reverse order, from B to A, because this is how the
+    //       previousStop map is structured.
+    TravelRoute travelRoute {
+        stationAId,
+        stationBId,
+        fastestPathToB.second,
+        {},
+    };
+    auto& stop {fastestPathToB.first};
+    while (stop.node != stationA) {
+        const auto& prevStop {previousStop.at(stop)};
+        travelRoute.steps.push_back(TravelRoute::Step {
+            prevStop.node->id,
+            stop.node->id,
+            stop.edge->route->line->id,
+            stop.edge->route->id,
+            stop.edge->travelTime,
+        });
+        stop = prevStop;
+    }
+    std::reverse(travelRoute.steps.begin(), travelRoute.steps.end());
+    return travelRoute;
+}
+
 // TransportNetwork — Private methods
 
 std::vector<
@@ -379,6 +603,31 @@ std::vector<
             return edge->route == route;
         }
     );
+}
+
+bool TransportNetwork::PathStop::operator==(
+    const TransportNetwork::PathStop& other
+) const
+{
+    return node == other.node && edge == other.edge;
+}
+
+size_t TransportNetwork::PathStopHash::operator()(
+    const TransportNetwork::PathStop& stop
+) const
+{
+    size_t seed {0};
+    boost::hash_combine(seed, stop.node ? stop.node->id : "");
+    boost::hash_combine(seed, stop.edge ? stop.edge->route->id : "");
+    return seed;
+}
+
+bool TransportNetwork::PathStopDistCmp::operator()(
+    const TransportNetwork::PathStopDist& a,
+    const TransportNetwork::PathStopDist& b
+) const
+{
+    return a.second > b.second;
 }
 
 std::shared_ptr<TransportNetwork::GraphNode> TransportNetwork::GetStation(

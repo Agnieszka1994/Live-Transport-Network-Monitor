@@ -6,8 +6,10 @@
 #include <nlohmann/json.hpp>
 
 #include <memory>
+#include <ostream>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace NetworkMonitor {
@@ -102,6 +104,66 @@ struct PassengerEvent {
 void from_json(
     const nlohmann::json& src,
     PassengerEvent& dst
+);
+
+/*! \brief Travel plan between two stations.
+ *
+ *  If startStationId and endStationId are the same station, the travel steps
+ *  vector contains one item.
+ *
+ *  If there is no valid travel route between startStationId and endStationId,
+ *  or if any of startStationId and endStationId is not in the network, the
+ *  travel steps vector is empty.
+ */
+struct TravelRoute {
+    struct Step {
+        Id startStationId {};
+        Id endStationId {};
+        Id lineId {};
+        Id routeId {};
+        unsigned int travelTime {0};
+
+        bool operator==(const Step& other) const;
+    };
+
+    Id startStationId {};
+    Id endStationId {};
+    unsigned int totalTravelTime {0};
+    std::vector<Step> steps {};
+
+    bool operator==(const TravelRoute& other) const;
+};
+
+/*! \brief Print operator for the `TravelRoute` class.
+ */
+std::ostream& operator<<(std::ostream& os, const TravelRoute& r);
+
+/* \brief Serialize TravelRoute::Step to JSON.
+ */
+void to_json(
+    nlohmann::json& dst,
+    const TravelRoute::Step& src
+);
+
+/* \brief Serialize TravelRoute::Step from JSON.
+ */
+void from_json(
+    const nlohmann::json& src,
+    TravelRoute::Step& dst
+);
+
+/* \brief Serialize TravelRoute to JSON.
+ */
+void to_json(
+    nlohmann::json& dst,
+    const TravelRoute& src
+);
+
+/* \brief Serialize TravelRoute from JSON.
+ */
+void from_json(
+    const nlohmann::json& src,
+    TravelRoute& dst
 );
 
 /*! \brief Underground network representation
@@ -269,6 +331,13 @@ public:
         const Id& stationB
     ) const;
 
+    /*! \brief Get the fastest travel route from station A to station B.
+     */
+    TravelRoute GetFastestTravelRoute(
+        const Id& stationA,
+        const Id& stationB
+    ) const;
+
 private:
     // Forward-declare all internal structs.
     struct GraphNode;
@@ -316,6 +385,37 @@ private:
         std::unordered_map<Id, std::shared_ptr<RouteInternal>> routes {};
     };
 
+    // A PathStop object represents a stop and the network edge to get to it.
+    // We use it internally in our path-finding algorithms.
+    struct PathStop {
+        std::shared_ptr<GraphNode> node {nullptr};
+        std::shared_ptr<GraphEdge> edge {nullptr};
+
+        bool operator==(
+            const PathStop& other
+        ) const;
+    };
+
+    // We need a custom PathStop hasher to use PathStop in std::unordered_map.
+    struct PathStopHash {
+        size_t operator()(
+            const PathStop& stop
+        ) const;
+    };
+
+    // We use PathStopDist in our path-finding algorithm to rank path stops
+    // by their distance from the path starting point.
+    using PathStopDist = std::pair<PathStop, unsigned int>;
+
+    // We need a custom PathStopDist comparator object to use PathStopDist in
+    // std::priority_queue.
+    struct PathStopDistCmp {
+        bool operator()(
+            const PathStopDist& a,
+            const PathStopDist& b
+        ) const;
+    };
+    
     // Map station and lines by ID. We do not map line routes here, as they
     // are mapped within each line representation.
     std::unordered_map<Id, std::shared_ptr<GraphNode>> stations_ {};

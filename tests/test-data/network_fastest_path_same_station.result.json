@@ -1,0 +1,14 @@
+{
+    "start_station_id": "station_A",
+    "end_station_id": "station_A",
+    "total_travel_time": 0,
+    "steps": [
+        {
+            "start_station_id": "station_A",
+            "end_station_id": "station_A",
+            "line_id": "",
+            "route_id": "",
+            "travel_time": 0
+        }
+    ]
+}

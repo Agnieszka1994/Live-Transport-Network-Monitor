@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <utility>
 
 using NetworkMonitor::Id;
 using NetworkMonitor::Line;
@@ -18,6 +19,10 @@ using NetworkMonitor::ParseJsonFile;
 using NetworkMonitor::Route;
 using NetworkMonitor::Station;
 using NetworkMonitor::TransportNetwork;
+using NetworkMonitor::TravelRoute;
+
+// Use this to set a timeout on tests that may hang.
+using timeout = boost::unit_test::timeout;
 
 BOOST_AUTO_TEST_SUITE(network_monitor);
 
@@ -743,6 +748,115 @@ BOOST_AUTO_TEST_CASE(fail_on_bad_travel_times)
 }
 
 BOOST_AUTO_TEST_SUITE_END(); // FromJson
+
+BOOST_AUTO_TEST_SUITE(Routes);
+
+static std::pair<TransportNetwork, TravelRoute> GetTestNetwork(
+    const std::string& filenameNoExtension,
+    bool useOriginalNetworkLayoutFile = false
+)
+{
+    auto testFilePath {useOriginalNetworkLayoutFile ?
+        std::filesystem::path(TESTS_NETWORK_LAYOUT_JSON) :
+        std::filesystem::path(TEST_DATA) / (filenameNoExtension + ".json")
+    };
+    auto src = ParseJsonFile(testFilePath);
+    BOOST_REQUIRE(src != nlohmann::json::object());
+    TransportNetwork nw {};
+    auto ok {nw.FromJson(std::move(src))};
+    BOOST_REQUIRE(ok);
+
+    auto resultFilePath {
+        std::filesystem::path(TEST_DATA) /
+        (filenameNoExtension + ".result.json")
+    };
+    auto travelRouteJson = ParseJsonFile(resultFilePath);
+    TravelRoute travelRoute;
+    try {
+        travelRoute = travelRouteJson.get<TravelRoute>();
+    } catch (...) {
+        BOOST_FAIL(std::string("Failed to parse result JSON file: ") +
+                   resultFilePath.string());
+    }
+    return std::make_pair<TransportNetwork, TravelRoute>(
+        std::move(nw),
+        std::move(travelRoute)
+    );
+}
+
+BOOST_AUTO_TEST_SUITE(GetFastestTravelRoute);
+
+BOOST_AUTO_TEST_CASE(same_station)
+{
+    auto [nw, resultTravelRoute] = GetTestNetwork(
+        "network_fastest_path_same_station"
+    );
+    auto travelRoute {nw.GetFastestTravelRoute("station_A", "station_A")};
+    BOOST_CHECK_EQUAL(travelRoute, resultTravelRoute);
+}
+
+BOOST_AUTO_TEST_CASE(missing_station)
+{
+    auto [nw, resultTravelRoute] = GetTestNetwork(
+        "network_fastest_path_missing_station"
+    );
+    auto travelRoute {nw.GetFastestTravelRoute("station_A", "station_X")};
+    BOOST_CHECK_EQUAL(travelRoute, resultTravelRoute);
+}
+
+BOOST_AUTO_TEST_CASE(no_path)
+{
+    auto [nw, resultTravelRoute] = GetTestNetwork(
+        "network_fastest_path_no_path"
+    );
+    auto travelRoute {nw.GetFastestTravelRoute("station_A", "station_B")};
+    BOOST_CHECK_EQUAL(travelRoute, resultTravelRoute);
+}
+
+BOOST_AUTO_TEST_CASE(one_route, *timeout {1})
+{
+    auto [nw, resultTravelRoute] = GetTestNetwork(
+        "network_fastest_path_1route"
+    );
+    auto travelRoute {nw.GetFastestTravelRoute("station_A", "station_B")};
+    BOOST_CHECK_EQUAL(travelRoute, resultTravelRoute);
+}
+
+BOOST_AUTO_TEST_CASE(two_routes, *timeout {1})
+{
+    auto [nw, resultTravelRoute] = GetTestNetwork(
+        "network_fastest_path_2routes"
+    );
+    auto travelRoute {nw.GetFastestTravelRoute("station_A", "station_B")};
+    BOOST_CHECK_EQUAL(travelRoute, resultTravelRoute);
+}
+
+BOOST_AUTO_TEST_CASE(two_routes_overlap, *timeout {1})
+{
+    auto [nw, resultTravelRoute] = GetTestNetwork(
+        "network_fastest_path_2routes_overlap"
+    );
+    auto travelRoute {nw.GetFastestTravelRoute("station_A", "station_B")};
+    BOOST_CHECK_EQUAL(travelRoute, resultTravelRoute);
+}
+
+BOOST_AUTO_TEST_CASE(ltc_path1, *timeout {1})
+{
+    auto [nw, resultTravelRoute] = GetTestNetwork("ltc_path1", true);
+    auto travelRoute {nw.GetFastestTravelRoute("station_003", "station_019")};
+    BOOST_CHECK_EQUAL(travelRoute, resultTravelRoute);
+}
+
+BOOST_AUTO_TEST_CASE(ltc_path2, *timeout {1})
+{
+    auto [nw, resultTravelRoute] = GetTestNetwork("ltc_path2", true);
+    auto travelRoute {nw.GetFastestTravelRoute("station_211", "station_119")};
+    BOOST_CHECK_EQUAL(travelRoute, resultTravelRoute);
+}
+
+BOOST_AUTO_TEST_SUITE_END(); // GetFastestTravelRoute
+
+BOOST_AUTO_TEST_SUITE_END(); // Routes
 
 BOOST_AUTO_TEST_SUITE_END(); // class_TransportNetwork
 
