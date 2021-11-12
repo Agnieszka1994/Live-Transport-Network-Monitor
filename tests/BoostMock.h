@@ -2,11 +2,13 @@
 #define NETWORK_MONITOR_TESTS_BOOST_MOCK_H
 
 #include <network-monitor/WebsocketClient.h>
+#include <network-monitor/WebsocketServer.h>
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 #include <boost/utility/string_view.hpp>
 
+#include <queue>
 #include <string>
 
 namespace NetworkMonitor {
@@ -90,6 +92,139 @@ private:
 
 // Out-of-line static member initialization
 inline boost::system::error_code MockResolver::resolveEc {};
+
+/*! \brief Mock the TCP acceptor from Boost.Asio.
+ *
+ *  We do not mock all available methods — only the ones we are interested in
+ *  for testing.
+ */
+class MockAcceptor {
+public:
+    /*! \brief Use this static member in a test to set the error code returned
+     *         by acceptor::open.
+     */
+    static boost::system::error_code openEc;
+
+    /*! \brief Use this static member in a test to set the error code returned
+     *         by acceptor::bind.
+     */
+    static boost::system::error_code bindEc;
+
+    /*! \brief Use this static member in a test to set the error code returned
+     *         by acceptor::listen.
+     */
+    static boost::system::error_code listenEc;
+
+    /*! \brief Use this static member in a test to set the error codes returned
+     *         by acceptor::async_accept. You can use the queue to trigger as
+     *         many connections as you want.
+     */
+    static std::queue<boost::system::error_code> acceptEc;
+
+    /*! \brief Mock for the resolver constructor
+     */
+    template <typename ExecutionContext>
+    explicit MockAcceptor(
+        ExecutionContext&& context
+    ) : context_ {context}
+    {
+    }
+
+    /*! \brief Mock for acceptor::open
+     */
+    template <typename ProtocolType>
+    void open(
+        const ProtocolType& protocol,
+        boost::system::error_code& ec
+    )
+    {
+        ec = openEc;
+    }
+
+    /*! \brief Mock for acceptor::set_option
+     */
+    template <typename SettableSocketOption>
+    void set_option(
+        const SettableSocketOption& option,
+        boost::system::error_code& ec
+    )
+    {
+        ec = {}; // We always succeed.
+    }
+
+    /*! \brief Mock for acceptor::bind
+     */
+    template <typename EndpointType>
+    void bind(
+        const EndpointType& protocol,
+        boost::system::error_code& ec
+    )
+    {
+        ec = bindEc;
+    }
+
+    /*! \brief Mock for acceptor::listen
+     */
+    void listen(
+        int backlog,
+        boost::system::error_code& ec
+    )
+    {
+        ec = listenEc;
+    }
+
+    /*! \brief Mock for acceptor::listen
+     */
+    void close()
+    {
+        // On close, schedule the next accept error code.
+        acceptEc.push(boost::asio::error::operation_aborted);
+    }
+
+    /*! \brief Mock for acceptor::async_accept
+     */
+    template <typename ExecutionContext, typename AcceptHandler>
+    void async_accept(
+        const ExecutionContext& context,
+        AcceptHandler&& handler
+    )
+    {
+        return boost::asio::async_initiate<
+            AcceptHandler,
+            void (boost::system::error_code, boost::asio::ip::tcp::socket&&)
+        >(
+            [this](auto&& handler, auto context) {
+                if (acceptEc.size() > 0) {
+                    auto ec {acceptEc.front()};
+                    acceptEc.pop();
+
+                    // Call the user callback.
+                    boost::asio::post(
+                        context,
+                        boost::beast::bind_handler(
+                            handler,
+                            ec,
+                            boost::asio::ip::tcp::socket(context)
+                        )
+                    );
+                }
+            },
+            handler,
+            context
+        );
+    }
+private:
+    // We leave this uninitialized because it does not support a default
+    // constructor.
+    boost::asio::strand<boost::asio::io_context::executor_type> context_;
+};
+
+// Out-of-line static member initialization
+inline boost::system::error_code MockAcceptor::openEc {};
+inline boost::system::error_code MockAcceptor::bindEc {};
+inline boost::system::error_code MockAcceptor::listenEc {};
+inline std::queue<boost::system::error_code> MockAcceptor::acceptEc {};
+
 
 /*! \brief Mock the TCP socket stream from Boost.Beast.
  */
@@ -215,7 +350,7 @@ public:
     using boost::beast::websocket::stream<TransportStream>::stream;
 
     /* \brief Use this static member in a test to set the error code returned by
-     * async_handshake.
+     * async_handshake  (client) and async_accept (server).
      */
     static boost::system::error_code handshakeEc;
 
@@ -268,6 +403,35 @@ public:
             this,
             host.to_string(),
             target.to_string()
+        );
+    }
+    
+    /*! 
+     * \brief Mock for websocket::stream::async_accept
+     */
+    template <typename HandshakeHandler>
+    void async_accept(
+        HandshakeHandler&& handler
+    )
+    {
+        return boost::asio::async_initiate<
+            HandshakeHandler,
+            void (boost::system::error_code)
+        >(
+            [](auto&& handler, auto stream) {
+                stream->closed_ = false;
+
+                // Call the user callback.
+                boost::asio::post(
+                    stream->get_executor(),
+                    boost::beast::bind_handler(
+                        std::move(handler),
+                        MockWebsocketStream::handshakeEc
+                    )
+                );
+            },
+            handler,
+            this
         );
     }
 
@@ -467,6 +631,13 @@ using MockTlsWebsocketStream = MockWebsocketStream<MockTlsStream>;
  */
 using TestWebsocketClient = WebsocketClient<
     MockResolver,
+    MockTlsWebsocketStream
+>;
+
+/*! \brief Type alias for the mocked WebsocketServer.
+ */
+using TestWebsocketServer = WebsocketServer<
+    MockAcceptor,
     MockTlsWebsocketStream
 >;
 
