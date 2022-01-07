@@ -17,6 +17,9 @@
 namespace NetworkMonitor {
 
 /*! \brief Mock the WebsocketClient class.
+ *
+ *  We do not mock all available methods — only the ones we are interested in
+ *  for testing.
  */
 class MockWebsocketClient {
 public:
@@ -67,6 +70,8 @@ public:
 
 private:
     // This strand handles all the user callbacks.
+    // We leave it uninitialized because it does not support a default
+    // constructor.
     boost::asio::strand<boost::asio::io_context::executor_type> context_;
 
     bool connected_ {false};
@@ -80,12 +85,15 @@ private:
 };
 
 /*! \brief Mock the WebsocketClient class to connect to a STOMP server.
+ *
+ *  We do not mock all available methods — only the ones we are interested in
+ *  for testing.
  */
 class MockWebsocketClientForStomp: public MockWebsocketClient {
 public:
     // Use these static members in a test to set the error codes returned by
     // the mock.
-    // Inherit all the lower-level controls for the underlying mock
+    // We also inherit all the lower-level controls for the underlying mock
     // Websocket connection.
     static std::string endpoint; // For example: /passegners
     static std::string username;
@@ -100,6 +108,11 @@ public:
         const std::string& port,
         boost::asio::io_context& ioc,
         boost::asio::ssl::context& ctx
+    );
+
+    static std::string GetMockSendFrame(
+        const std::string& destination,
+        const std::string& messageContent
     );
 
 private:

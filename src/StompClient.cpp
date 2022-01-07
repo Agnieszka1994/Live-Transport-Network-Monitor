@@ -34,6 +34,8 @@ static const auto gStompClientErrorStrings {
                            "CouldNotParseMessageAsStompFrame"  },
         {StompClientError::kCouldNotSendStompFrame            ,
                            "CouldNotSendStompFrame"            },
+        {StompClientError::kCouldNotSendMessage               ,
+                           "CouldNotSendMessage"               },
         {StompClientError::kCouldNotSendSubscribeFrame        ,
                            "CouldNotSendSubscribeFrame"        },
         {StompClientError::kUnexpectedCouldNotCreateValidFrame,

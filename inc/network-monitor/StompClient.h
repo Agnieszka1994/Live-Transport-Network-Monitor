@@ -30,6 +30,7 @@ enum class StompClientError {
     kCouldNotCloseWebsocketConnection,
     kCouldNotConnectToWebsocketServer,
     kCouldNotParseMessageAsStompFrame,
+    kCouldNotSendMessage,
     kCouldNotSendStompFrame,
     kCouldNotSendSubscribeFrame,
     kUnexpectedCouldNotCreateValidFrame,
@@ -109,6 +110,13 @@ public:
      *                      is setup correctly. It will also be called with an
      *                      error if there is any failure before a successful
      *                      connection.
+     *  \param onMessage    This handler is called when the connected client
+     *                      or server sends us a message as a SEND frame. The
+     *                      handler contains an error code, the message
+     *                      destination and content. Ownership of the
+     *                      message content is passed to the receiver. It is
+     *                      assumed that the message is received with
+     *                      application/json content type.
      *  \param onDisconnect This handler is called when the STOMP or the
      *                      Websocket connection is suddenly closed. In the
      *                      STOMP protocol, this may happen also in response to
@@ -121,6 +129,9 @@ public:
         const std::string& username,
         const std::string& password,
         std::function<void (StompClientError)> onConnect = nullptr,
+        std::function<
+            void (StompClientError, const std::string&, std::string&&)
+        > onMessage = nullptr,
         std::function<void (StompClientError)> onDisconnect = nullptr
     )
     {
@@ -128,6 +139,7 @@ public:
         username_ = username;
         password_ = password;
         onConnect_ = onConnect;
+        onMessage_ = onMessage;
         onDisconnect_ = onDisconnect;
         ws_.Connect(
             [this](auto ec) {
@@ -237,6 +249,74 @@ public:
         return subscriptionId;
     }
 
+    /*! \brief Send a JSON message to a STOMP destination enpoint.
+     *
+     *  \returns The request ID. If empty, we failed to send the message.
+     *
+     *  \param destination      The message destination.
+     *  \param messageContent   A string containing the message content. We do
+     *                          not check if this string is compatible with the
+     *                          content type. We assume the content type is
+     *                          application/json. The caller must ensure that
+     *                          this string stays in scope until the onSend
+     *                          handler is called.
+     *  \param onSend           This handler is called when the Websocket
+     *                          client terminates the Send operation. On
+     *                          success, we cannot guarantee that the message
+     *                          reached the STOMP server, only that is was
+     *                          correctly sent at the Websocket level. The
+     *                          handler contains an error code and the message
+     *                          request ID.
+     *
+     *  All handlers run in a separate I/O execution context from the Websocket
+     *  one.
+     */
+    std::string Send(
+        const std::string& destination,
+        const std::string& messageContent,
+        std::function<void (StompClientError, std::string&&)> onSend = nullptr
+    )
+    {
+        spdlog::info("StompClient: Sending message to {}", destination);
+
+        auto requestId {GenerateId()};
+        auto messageSize {messageContent.size()};
+
+        // Assemble the SEND frame.
+        StompError error {};
+        StompFrame frame {
+            error,
+            StompCommand::kSend,
+            {
+                {StompHeader::kId, requestId},
+                {StompHeader::kDestination, destination},
+                {StompHeader::kContentType, "application/json"},
+                {StompHeader::kContentLength, std::to_string(messageSize)},
+            },
+            messageContent,
+        };
+        if (error != StompError::kOk) {
+            spdlog::error("StompClient: Could not create a valid frame: {}",
+                          error);
+            return "";
+        }
+
+        // Send the Websocket message.
+        if (onSend == nullptr) {
+            ws_.Send(frame.ToString());
+        } else {
+            ws_.Send(
+                frame.ToString(),
+                [requestId, onSend](auto ec) mutable {
+                    auto error {ec ? StompClientError::kCouldNotSendMessage :
+                                     StompClientError::kOk};
+                    onSend(error, std::move(requestId));
+                }
+            );
+        }
+        return requestId;
+    }
+
 private:
     // This strand handles all the STOMP subscription messages. These operations
     // are decoupled from the Websocket operations.
@@ -251,6 +331,9 @@ private:
     WsClient ws_;
 
     std::function<void (StompClientError)> onConnect_ {nullptr};
+    std::function<
+        void (StompClientError, const std::string&, std::string&&)
+    > onMessage_ {nullptr};
     std::function<void (StompClientError)> onDisconnect_ {nullptr};
     std::string username_ {};
     std::string password_ {};
@@ -423,6 +506,10 @@ private:
                 HandleSubscriptionReceipt(std::move(frame));
                 break;
             }
+            case StompCommand::kSend: {
+                HandleMessage(std::move(frame));
+                break;
+            }
             default: {
                 spdlog::error("StompClient: Unexpected STOMP command: {}",
                               frame.GetCommand());
@@ -570,6 +657,31 @@ private:
                 ]() mutable {
                     onSubscribe(StompClientError::kOk,
                                 std::move(subscriptionId));
+                }
+            );
+        }
+    }
+
+    void HandleMessage(
+        StompFrame&& frame
+    )
+    {
+        // Call the user callback.
+        if (onMessage_) {
+            boost::asio::post(
+                context_,
+                [
+                    onMessage = onMessage_,
+                    destination = std::string(frame.GetHeaderValue(
+                        StompHeader::kDestination
+                    )),
+                    message = std::string(frame.GetBody())
+                ]() mutable {
+                    onMessage(
+                        StompClientError::kOk,
+                        destination,
+                        std::move(message)
+                    );
                 }
             );
         }

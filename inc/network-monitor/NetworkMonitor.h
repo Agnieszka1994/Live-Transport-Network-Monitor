@@ -172,6 +172,7 @@ public:
             [this](auto ec) {
                 OnNetworkEventsConnect(ec);
             },
+            nullptr,
             [this](auto ec) {
                 OnNetworkEventsDisconnect(ec);
             }

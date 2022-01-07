@@ -200,6 +200,34 @@ MockWebsocketClientForStomp::MockWebsocketClientForStomp(
     };
 }
 
+std::string MockWebsocketClientForStomp::GetMockSendFrame(
+    const std::string& destination,
+    const std::string& messageContent
+)
+{
+    static const long long int counter {0};
+
+    auto messageSize {messageContent.size()};
+
+    StompError error;
+    StompFrame frame {
+        error,
+        StompCommand::kSend,
+        {
+            {StompHeader::kId, std::to_string(counter)},
+            {StompHeader::kDestination, destination},
+            {StompHeader::kContentType, "application/json"},
+            {StompHeader::kContentLength, std::to_string(messageSize)},
+        },
+        messageContent
+    };
+    if (error != StompError::kOk) {
+        throw std::runtime_error("Unexpected: Invalid mock STOMP frame: " +
+                                 ToString(error));
+    }
+    return frame.ToString();
+}
+
 // Private methods
 
 StompFrame MockWebsocketClientForStomp::MakeConnectedFrame()
