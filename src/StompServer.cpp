@@ -35,7 +35,7 @@ static const auto gStompServerErrorStrings {
         {StompServerError::kCouldNotSendMessage               ,
                            "CouldNotSendMessage"               },
         {StompServerError::kCouldNotStartWebsocketServer      ,
-                           "CouldNotStartWebSocketServer"      },
+                           "CouldNotStartWebsocketServer"      },
         {StompServerError::kInvalidHeaderValueAcceptVersion   ,
                            "InvalidHeaderValueAcceptVersion"   },
         {StompServerError::kInvalidHeaderValueHost            ,
@@ -43,9 +43,9 @@ static const auto gStompServerErrorStrings {
         {StompServerError::kUnsupportedFrame                  ,
                            "UnsupportedFrame"                  },
         {StompServerError::kWebsocketSessionDisconnected      ,
-                           "WebSocketSessionDisconnected"      },
+                           "WebsocketSessionDisconnected"      },
         {StompServerError::kWebsocketServerDisconnected       ,
-                           "WebSocketServerDisconnected"       },
+                           "WebsocketServerDisconnected"       },
     })
 };
 

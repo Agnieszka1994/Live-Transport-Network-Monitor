@@ -5,12 +5,14 @@
 
 #include <nlohmann/json.hpp>
 
+#include <limits>
 #include <memory>
 #include <ostream>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <unordered_set>
 
 namespace NetworkMonitor {
 
@@ -338,6 +340,24 @@ public:
         const Id& stationB
     ) const;
 
+    /*! \brief Get a quiet travel route alternative to the fastest route, from
+     *         station A to station B.
+     *
+     *  \param maxSlowdownPc    Maximum travel time increase when picking a
+     *                          quiet route.
+     *  \param minQuietnessPc   Minimum decrease in route crowding that makes a
+     *                          quiet route worth the travel time increase.
+     *  \param maxNPaths        Maximum number of paths to explore. If set,
+     *                          this method may yield suboptimal results.
+     */
+    TravelRoute GetQuietTravelRoute(
+        const Id& stationA,
+        const Id& stationB,
+        const double maxSlowdownPc,
+        const double minQuietnessPc,
+        const size_t maxNPaths = std::numeric_limits<size_t>::max()
+    ) const;
+
 private:
     // Forward-declare all internal structs.
     struct GraphNode;
@@ -415,7 +435,16 @@ private:
             const PathStopDist& b
         ) const;
     };
-    
+
+    using Path = std::vector<PathStopDist>;
+
+    struct PathCmp {
+        bool operator()(
+            const Path& a,
+            const Path& b
+        ) const;
+    };
+
     // Map station and lines by ID. We do not map line routes here, as they
     // are mapped within each line representation.
     std::unordered_map<Id, std::shared_ptr<GraphNode>> stations_ {};
@@ -442,6 +471,33 @@ private:
         const Route& route,
         const std::shared_ptr<LineInternal>& lineInternal
     );
+
+    // Internal version of GetFastestTravelRoute.
+    // We pass station A as a PathStopDist instance instead of as a GraphNode
+    // pointer to allow for warm starts, i.e. paths that start with a pre-set
+    // distance-from-origin and incoming route.
+    // We also pass a set of excluded stops in case we want to skip some
+    // stations from the paht-finding algorithm.
+    Path GetFastestTravelRoute(
+        const PathStopDist& stopA,
+        const std::shared_ptr<GraphNode>& stationB,
+        const std::unordered_set<PathStop, PathStopHash>& excludedStops = {}
+    ) const;
+
+    // Internal function to get all the paths (up to maxNPaths) that meet a
+    // certain travel time criterion:
+    // bestTravelTime <= travelTime <= bestTravelTime * (1 + maxSlowdownPc)
+    std::vector<Path> GetFastestTravelRoutes(
+        const std::shared_ptr<TransportNetwork::GraphNode>& stationA,
+        const std::shared_ptr<TransportNetwork::GraphNode>& stationB,
+        const double maxSlowdownPc,
+        const size_t maxNPaths = std::numeric_limits<size_t>::max()
+    ) const;
+
+    // Get the total crowding over a given path.
+    unsigned int GetPathCrowding(
+        const Path& path
+    ) const;
 };
 
 } // namespace NetworkMonitor

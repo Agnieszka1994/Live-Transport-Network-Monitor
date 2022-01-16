@@ -30,8 +30,12 @@ static const auto gNetworkMonitorErrorStrings {
                               "CouldNotConnectToStompClient"      },
         {NetworkMonitorError::kCouldNotParsePassengerEvent       ,
                               "CouldNotParsePassengerEvent"       },
+        {NetworkMonitorError::kCouldNotParseQuietRouteRequest    ,
+                              "CouldNotParseQuietRouteRequest"    },
         {NetworkMonitorError::kCouldNotRecordPassengerEvent      ,
                               "CouldNotRecordPassengerEvent"      },
+        {NetworkMonitorError::kCouldNotStartStompServer          ,
+                              "CouldNotStartStompServer"          },
         {NetworkMonitorError::kCouldNotSubscribeToPassengerEvents,
                               "CouldNotSubscribeToPassengerEvents"},
         {NetworkMonitorError::kFailedNetworkLayoutFileDownload   ,
@@ -46,6 +50,10 @@ static const auto gNetworkMonitorErrorStrings {
                               "MissingNetworkLayoutFile"          },
         {NetworkMonitorError::kStompClientDisconnected           ,
                               "StompClientDisconnected"           },
+        {NetworkMonitorError::kStompServerClientDisconnected     ,
+                              "StompServerClientDisconnected"     },
+        {NetworkMonitorError::kStompServerDisconnected           ,
+                              "StompServerDisconnected"           },
     })
 };
 

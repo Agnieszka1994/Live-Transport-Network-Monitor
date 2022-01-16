@@ -475,82 +475,14 @@ TravelRoute TransportNetwork::GetFastestTravelRoute(
         };
     }
 
-    // Supporting data structures for Dijkstra's algorithm.
-    // - Distance of any station from A, through a specific route.
-    std::unordered_map<PathStop, unsigned int, PathStopHash> distFromA {};
-    distFromA[{stationA, nullptr}] = 0;
-    // - The previous stop in the shortest path.
-    std::unordered_map<PathStop, PathStop, PathStopHash> previousStop {};
-    // - The priority queue of stops to visit.
-    std::priority_queue<
-        PathStopDist,
-        std::vector<PathStopDist>,
-        PathStopDistCmp
-    > nodesToVisit;
-    nodesToVisit.push({{stationA, nullptr}, 0});
-
-    // Dijkstra's algorithm
-    while (!nodesToVisit.empty()) {
-        // Remove the node from the priority queue.
-        auto [currStop, currentDistFromA] = nodesToVisit.top();
-        const auto& currStation {currStop.node};
-        const auto& edgeToCurrStation {currStop.edge};
-        nodesToVisit.pop();
-
-        // Check if we found station B.
-        if (currStation == stationB) {
-            // We do not want to break here! We may still have some nodes in
-            // the queue that may lead to a better path to station B.
-            continue;
-        }
-
-        // Explore the neighborhood.
-        for (const auto& neighborEdge: currStation->edges) {
-            PathStop neighbor {neighborEdge->nextStop, neighborEdge};
-
-            // Calculate the distance of the neighbor from station A.
-            auto neighborDistFromA {currentDistFromA + neighborEdge->travelTime};
-            if (edgeToCurrStation != nullptr &&
-                edgeToCurrStation->route != neighborEdge->route
-            ) {
-                // We add a penalty of 5 minutes if we need to change route to
-                // get to our neighbor.
-                neighborDistFromA += 5;
-            }
-
-            // Update our records of the fastest way to get to the neighbor.
-            const auto neighborDistFromAIt {distFromA.find(neighbor)};
-            if (neighborDistFromAIt == distFromA.end()) {
-                // First time we see this neighbor.
-                distFromA[neighbor] = neighborDistFromA;
-                previousStop[neighbor] = currStop;
-                nodesToVisit.push({neighbor, neighborDistFromA});
-            } else {
-                // We already saw this neighbor, and only update our records if
-                // it's worth it.
-                if (neighborDistFromA < neighborDistFromAIt->second) {
-                    distFromA[neighbor] = neighborDistFromA;
-                    previousStop[neighbor] = currStop;
-
-                    // Note: Because there may have been a change of routes in
-                    //       the path to this neighbor, we need to re-walk the
-                    //       path from here onwards.
-                    nodesToVisit.push({neighbor, neighborDistFromA});
-                }
-            }
-        }
-    }
-
-    // Valid paths to station B.
-    std::vector<PathStopDist> pathsToB {};
-    for (const auto& [pathStop, distance]: distFromA) {
-        if (pathStop.node == stationB) {
-            pathsToB.push_back({pathStop, distance});
-        }
-    }
+    // Get the fastest path from A to B.
+    const auto path {GetFastestTravelRoute(
+        {{stationA, nullptr}, 0},
+        stationB
+    )};
 
     // Corner case: There is no valid path between A and B.
-    if (pathsToB.empty()) {
+    if (path.empty()) {
         return TravelRoute {
             stationAId,
             stationBId,
@@ -559,32 +491,130 @@ TravelRoute TransportNetwork::GetFastestTravelRoute(
         };
     }
 
-    // Sort the pathsToB vector to get the fastest path from A to B.
-    std::sort(pathsToB.begin(), pathsToB.end(), PathStopDistCmp {});
-    auto& fastestPathToB {pathsToB.back()};
+    // Assemble the path.
+    // Note: We go in reverse order, from B to A, because this is how the
+    //       previousStop map is structured.
+    const auto& totalTravelTime {path.back().second};
+    TravelRoute travelRoute {
+        stationAId,
+        stationBId,
+        totalTravelTime,
+        {},
+    };
+    travelRoute.steps.reserve(path.size());
+    for (size_t idx {1}; idx < path.size(); ++idx) {
+        const auto& prevStop {path[idx - 1].first};
+        const auto& currStop {path[idx].first};
+        travelRoute.steps.push_back(TravelRoute::Step {
+            prevStop.node->id,
+            currStop.node->id,
+            currStop.edge->route->line->id,
+            currStop.edge->route->id,
+            currStop.edge->travelTime,
+        });
+    }
+    return travelRoute;
+}
+
+TravelRoute TransportNetwork::GetQuietTravelRoute(
+    const Id& stationAId,
+    const Id& stationBId,
+    const double maxSlowdownPc,
+    const double minQuietnessPc,
+    const size_t maxNPaths
+) const
+{
+    // Find the stations.
+    const auto stationA {GetStation(stationAId)};
+    const auto stationB {GetStation(stationBId)};
+    if (stationA == nullptr || stationB == nullptr) {
+        return TravelRoute {};
+    }
+    spdlog::info("GetQuietTravelRoute: {} -> {}", stationA->id, stationB->id);
+
+    // Corner case: A and B are the same station.
+    if (stationA == stationB) {
+        return TravelRoute {
+            stationAId,
+            stationAId,
+            0,
+            {TravelRoute::Step {
+                stationAId,
+                stationAId,
+                {},
+                {},
+                0
+            }},
+        };
+    }
+
+    // Get all the paths within a certain travel time threshold.
+    // These are all valid candidates for the most quiet route.
+    auto paths {GetFastestTravelRoutes(
+        stationA,
+        stationB,
+        maxSlowdownPc,
+        maxNPaths
+    )};
+
+    // Corner case: There is no valid path between A and B.
+    if (paths.empty()) {
+        return TravelRoute {
+            stationAId,
+            stationBId,
+            0,
+            {},
+        };
+    }
+
+    // Select the most quiet route among the fastest paths.
+    // By definition, we only selected paths that have an acceptable travel
+    // time, so here we can simply select the path with the lowest passenger
+    // count. If the path is not quiet "enough", we just go with the fastest
+    // route.
+    spdlog::info("Found {} paths", paths.size());
+    auto& mostQuietPath {paths.front()}; // Fastest path
+    unsigned int minCrowding {GetPathCrowding(paths.front())};
+    spdlog::info("Fastest path: {} travel time, {} crowding",
+                 mostQuietPath.back().second, minCrowding);
+    auto maxCrowding {static_cast<unsigned int>(
+        minCrowding * (1 - minQuietnessPc)
+    )};
+    for (size_t idx {1}; idx < paths.size(); ++idx) {
+        auto crowding {GetPathCrowding(paths[idx])};
+        if (crowding > maxCrowding) {
+            continue;
+        }
+        if (crowding < minCrowding) {
+            minCrowding = crowding;
+            mostQuietPath = paths[idx];
+        }
+    }
+    spdlog::info("Most quiet path: {} travel time, {} crowding",
+                 mostQuietPath.back().second, minCrowding);
 
     // Assemble the path.
     // Note: We go in reverse order, from B to A, because this is how the
     //       previousStop map is structured.
+    const auto& totalTravelTime {mostQuietPath.back().second};
     TravelRoute travelRoute {
         stationAId,
         stationBId,
-        fastestPathToB.second,
+        totalTravelTime,
         {},
     };
-    auto& stop {fastestPathToB.first};
-    while (stop.node != stationA) {
-        const auto& prevStop {previousStop.at(stop)};
+    travelRoute.steps.reserve(mostQuietPath.size());
+    for (size_t idx {1}; idx < mostQuietPath.size(); ++idx) {
+        const auto& prevStop {mostQuietPath[idx - 1].first};
+        const auto& currStop {mostQuietPath[idx].first};
         travelRoute.steps.push_back(TravelRoute::Step {
             prevStop.node->id,
-            stop.node->id,
-            stop.edge->route->line->id,
-            stop.edge->route->id,
-            stop.edge->travelTime,
+            currStop.node->id,
+            currStop.edge->route->line->id,
+            currStop.edge->route->id,
+            currStop.edge->travelTime,
         });
-        stop = prevStop;
     }
-    std::reverse(travelRoute.steps.begin(), travelRoute.steps.end());
     return travelRoute;
 }
 
@@ -628,6 +658,14 @@ bool TransportNetwork::PathStopDistCmp::operator()(
 ) const
 {
     return a.second > b.second;
+}
+
+bool TransportNetwork::PathCmp::operator()(
+    const TransportNetwork::Path& a,
+    const TransportNetwork::Path& b
+) const
+{
+    return a.back().second > b.back().second;
 }
 
 std::shared_ptr<TransportNetwork::GraphNode> TransportNetwork::GetStation(
@@ -713,4 +751,233 @@ bool TransportNetwork::AddRouteToLine(
     lineInternal->routes[route.id] = std::move(routeInternal);
 
     return true;
+}
+
+TransportNetwork::Path TransportNetwork::GetFastestTravelRoute(
+    const TransportNetwork::PathStopDist& stopA,
+    const std::shared_ptr<TransportNetwork::GraphNode>& stationB,
+    const std::unordered_set<
+        TransportNetwork::PathStop, TransportNetwork::PathStopHash
+    >& excludedStops
+) const
+{
+    const auto& stationA {stopA.first.node};
+
+    // Corner case: A and B are the same station.
+    if (stationA == stationB) {
+        return {{{stationA, nullptr}, 0}};
+    }
+
+    // Supporting data structures for Dijkstra's algorithm.
+    // - Distance of any station from A, through a specific route.
+    std::unordered_map<PathStop, unsigned int, PathStopHash> distFromA {};
+    distFromA[stopA.first] = stopA.second;
+    // - The previous stop in the shortest path.
+    std::unordered_map<PathStop, PathStop, PathStopHash> previousStop {};
+    // - The priority queue of stops to visit.
+    std::priority_queue<
+        PathStopDist,
+        std::vector<PathStopDist>,
+        PathStopDistCmp
+    > nodesToVisit;
+    nodesToVisit.push(stopA);
+
+    // Dijkstra's algorithm
+    while (!nodesToVisit.empty()) {
+        // Remove the node from the priority queue.
+        auto [currStop, currentDistFromA] = nodesToVisit.top();
+        const auto& currStation {currStop.node};
+        const auto& edgeToCurrStation {currStop.edge};
+        nodesToVisit.pop();
+
+        // Check if we found station B.
+        if (currStation == stationB) {
+            // We do not want to break here! We may still have some nodes in
+            // the queue that may lead to a better path to station B.
+            continue;
+        }
+
+        // Explore the neighborhood.
+        for (const auto& neighborEdge: currStation->edges) {
+            PathStop neighbor {neighborEdge->nextStop, neighborEdge};
+            if (excludedStops.find(neighbor) != excludedStops.end()) {
+                continue;
+            }
+
+            // Calculate the distance of the neighbor from station A.
+            auto neighborDistFromA {currentDistFromA + neighborEdge->travelTime};
+            if (edgeToCurrStation != nullptr &&
+                edgeToCurrStation->route != neighborEdge->route
+            ) {
+                // We add a penalty of 5 minutes if we need to change route to
+                // get to our neighbor.
+                neighborDistFromA += 5;
+            }
+
+            // Update our records of the fastest way to get to the neighbor.
+            const auto neighborDistFromAIt {distFromA.find(neighbor)};
+            if (neighborDistFromAIt == distFromA.end()) {
+                // First time we see this neighbor.
+                distFromA[neighbor] = neighborDistFromA;
+                previousStop[neighbor] = currStop;
+                nodesToVisit.push({neighbor, neighborDistFromA});
+            } else {
+                // We already saw this neighbor, and only update our records if
+                // it's worth it.
+                if (neighborDistFromA < neighborDistFromAIt->second) {
+                    distFromA[neighbor] = neighborDistFromA;
+                    previousStop[neighbor] = currStop;
+
+                    // Note: Because there may have been a change of routes in
+                    //       the path to this neighbor, we need to re-walk the
+                    //       path from here onwards.
+                    nodesToVisit.push({neighbor, neighborDistFromA});
+                }
+            }
+        }
+    }
+
+    // Valid paths to station B.
+    std::vector<PathStopDist> pathsToB {};
+    for (const auto& [pathStop, distance]: distFromA) {
+        if (pathStop.node == stationB) {
+            pathsToB.push_back({pathStop, distance});
+        }
+    }
+
+    // Check if we found no valid path between A and B.
+    if (pathsToB.empty()) {
+        return {};
+    }
+
+    // Sort the pathsToB vector to get the fastest path from A to B.
+    std::sort(pathsToB.begin(), pathsToB.end(), PathStopDistCmp {});
+    auto& fastestPathToB {pathsToB.back()};
+
+    // Assemble the path.
+    // Note: We go in reverse order, from B to A, because this is how the
+    //       previousStop map is structured.
+    Path path {fastestPathToB};
+    auto& stop {fastestPathToB.first};
+    while (stop.node != stationA) {
+        stop = previousStop.at(stop);
+        const auto& distance {distFromA.at(stop)};
+        path.push_back({stop, distance});
+    }
+    std::reverse(path.begin(), path.end());
+
+    return path;
+}
+
+std::vector<TransportNetwork::Path> TransportNetwork::GetFastestTravelRoutes(
+    const std::shared_ptr<TransportNetwork::GraphNode>& stationA,
+    const std::shared_ptr<TransportNetwork::GraphNode>& stationB,
+    const double maxSlowdownPc,
+    const size_t maxNPaths
+) const
+{
+    // Start by finding the fastest path in the network.
+    const auto fastestPath {GetFastestTravelRoute(
+        {{stationA, nullptr}, 0},
+        stationB
+    )};
+    if (fastestPath.empty()) {
+        return {};
+    }
+    const auto& minTravelTime {fastestPath.back().second};
+
+    // Supporting data structures for Yen's algorithm
+    // - List of fastest paths
+    std::vector<Path> fastestPaths {fastestPath};
+    // - Set of potential k-th shortest paths
+    //   We use a priority queue because at the k-th iteration we want to
+    //   extract the k-th fastest path among all options found so far.
+    std::priority_queue<Path, std::vector<Path>, PathCmp> potentialPaths;
+
+    // Differently from Yen's algorithm, we do not calculate a fixed number of
+    // paths (k). Instead, we calculate all paths within a certain travel time.
+    // To avoid an excessive amount of calculations, we also limit the total
+    // number of paths we find.
+    const auto maxTravelTime {static_cast<unsigned int>(
+        minTravelTime * (1 + maxSlowdownPc)
+    )};
+    while (fastestPaths.size() < maxNPaths) {
+        const auto& lastFastestPath {fastestPaths.back()};
+
+        // Find all potential paths for the k-th fastest path.
+        for (size_t idx {0}; idx < lastFastestPath.size() - 1; ++idx) {
+            const auto& rootPathStart {lastFastestPath.begin()};
+            const auto& rootPathEnd {lastFastestPath.begin() + idx};
+            const auto& spurNode {lastFastestPath[idx]};
+
+            // Remove the links shared between this path and the previous one.
+            std::unordered_set<PathStop, PathStopHash> removedStops;
+            for (const auto& path: fastestPaths) {
+                if (idx < path.size() - 1 &&
+                    std::equal(
+                        path.begin(), path.begin() + idx,
+                        rootPathStart, rootPathEnd
+                    )) {
+                    removedStops.insert(path[idx + 1].first);
+                }
+            }
+
+            // Find the shortest path from the spur stop to station B.
+            const auto spurPath {GetFastestTravelRoute(
+                spurNode,
+                stationB,
+                removedStops
+            )};
+
+            // Assemble the new potential path.
+            // newPath = rootPath + spurPath;
+            if (!spurPath.empty()) {
+                Path newPath {};
+                newPath.reserve(idx + 1 + spurPath.size());
+                newPath.insert(newPath.end(),
+                               rootPathStart, rootPathEnd);
+                newPath.insert(newPath.end(),
+                               spurPath.begin(), spurPath.end());
+                potentialPaths.emplace(std::move(newPath));
+            }
+        }
+
+        // Select the k-th fastest path from the queue.
+        // The priority queue is sorted so that we always process the fastest
+        // paths first. We may already have found some of these paths, though.
+        bool kthPathFound {false};
+        while (potentialPaths.size() > 0) {
+            auto kthPath {potentialPaths.top()};
+            potentialPaths.pop();
+            if (kthPath.back().second > maxTravelTime) {
+                // Since the queue is sorted, if we got here it means there is
+                // nothing else left to explore that would meet our travel time
+                // requirements.
+                break;
+            }
+            if (std::find(fastestPaths.begin(), fastestPaths.end(), kthPath)
+                == fastestPaths.end()) {
+                // We have found the kth fastest path.
+                fastestPaths.emplace_back(std::move(kthPath));
+                kthPathFound = true;
+                break;
+            }
+        }
+        if (!kthPathFound) {
+            break;
+        }
+    }
+
+    return fastestPaths;
+}
+
+unsigned int TransportNetwork::GetPathCrowding(
+    const Path& path
+) const
+{
+    unsigned int totPassengerCount {0};
+    for (const auto& [stop, _]: path) {
+        totPassengerCount += stop.node->passengerCount;
+    }
+    return totPassengerCount;
 }
