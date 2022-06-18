@@ -1,0 +1,126 @@
+{
+    "start_station_id": "station_211",
+    "end_station_id": "station_119",
+    "total_travel_time": 30,
+    "steps": [
+        {
+            "start_station_id": "station_211",
+            "end_station_id": "station_210",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_210",
+            "end_station_id": "station_209",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_209",
+            "end_station_id": "station_208",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_208",
+            "end_station_id": "station_207",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_207",
+            "end_station_id": "station_206",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_206",
+            "end_station_id": "station_205",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_205",
+            "end_station_id": "station_204",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 2
+        },
+        {
+            "start_station_id": "station_204",
+            "end_station_id": "station_203",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_203",
+            "end_station_id": "station_024",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 2
+        },
+        {
+            "start_station_id": "station_024",
+            "end_station_id": "station_202",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 2
+        },
+        {
+            "start_station_id": "station_202",
+            "end_station_id": "station_149",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_149",
+            "end_station_id": "station_039",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_039",
+            "end_station_id": "station_089",
+            "line_id": "line_007",
+            "route_id": "route_049",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_089",
+            "end_station_id": "station_038",
+            "line_id": "line_004",
+            "route_id": "route_030",
+            "travel_time": 1
+        },
+        {
+            "start_station_id": "station_038",
+            "end_station_id": "station_121",
+            "line_id": "line_004",
+            "route_id": "route_030",
+            "travel_time": 4
+        },
+        {
+            "start_station_id": "station_121",
+            "end_station_id": "station_120",
+            "line_id": "line_004",
+            "route_id": "route_030",
+            "travel_time": 2
+        },
+        {
+            "start_station_id": "station_120",
+            "end_station_id": "station_119",
+            "line_id": "line_004",
+            "route_id": "route_030",
+            "travel_time": 2
+        }
+    ]
+}
