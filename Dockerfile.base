@@ -1,0 +1,6 @@
+FROM ubuntu:focal
+
+ARG APP_USER=admin
+
+RUN useradd --user-group --create-home --shell /bin/false ${APP_USER} && \
+    adduser ${APP_USER} sudo

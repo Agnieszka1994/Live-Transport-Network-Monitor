@@ -11,12 +11,27 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/conaninfo.txt)
     list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
-find_package(Boost 1.74 REQUIRED COMPONENTS system unit_test_framework)
+###################################################################
+set(Boost_NO_BOOST_CMAKE OFF)
+set(BOOST_ROOT $ENV{BOOST_ROOT})
+message("BOOST_ROOT is set to: " ${BOOST_ROOT})
+set(BUILD_SHARED_LIBS ON)
+set(Boost_USE_MULTITHREADED ON)
+find_package(Boost 1.74.0 COMPONENTS system unit_test_framework filesystem thread chrono program_options date_time coroutine context regex REQUIRED)
+message("BOOST includes at ${Boost_INCLUDE_DIR}")
+include_directories(SYSTEM ${Boost_INCLUDE_DIR})
+
+###################################################################
 find_package(CURL REQUIRED)
 find_package(Filesystem REQUIRED)
 find_package(nlohmann_json REQUIRED)
+
+###################################################################
+set(OPENSSL_USE_STATIC_LIBS TRUE)
 find_package(OpenSSL REQUIRED)
-find_package(spdlog REQUIRED)
+
+###################################################################
+add_subdirectory(dependencies)
 
 # Called before any other target is defined.
 enable_testing()
@@ -43,11 +58,11 @@ target_compile_features(network-monitor
     PUBLIC
         cxx_std_17
 )
-target_compile_definitions(network-monitor 
-    PUBLIC
-        SPDLOG_COMPILED_LIB
-        SPDLOG_FMT_EXTERNAL
-)
+# target_compile_definitions(network-monitor 
+#     PUBLIC
+#         SPDLOG_COMPILED_LIB
+#         SPDLOG_FMT_EXTERNAL
+# )
 target_compile_definitions(network-monitor
     PRIVATE
         $<$<PLATFORM_ID:Windows>:_WIN32_WINNT=${WINDOWS_VERSION}>
@@ -58,13 +73,13 @@ target_include_directories(network-monitor
 )
 target_link_libraries(network-monitor
     PUBLIC
-        Boost::Boost
+        Boost
         nlohmann_json::nlohmann_json
-        OpenSSL::OpenSSL
+        OpenSSL
         std::filesystem
         spdlog::spdlog
     PRIVATE
-        CURL::CURL
+        curl
 )
 
 # Tests
@@ -100,9 +115,9 @@ target_compile_options(network-monitor-tests
 target_link_libraries(network-monitor-tests
     PRIVATE
         network-monitor
-        Boost::Boost
+        Boost
         nlohmann_json::nlohmann_json
-        OpenSSL::OpenSSL
+        OpenSSL
         spdlog::spdlog
         std::filesystem
 )
@@ -181,7 +196,7 @@ target_link_libraries(test-client-exe
     PRIVATE
         network-monitor
         nlohmann_json::nlohmann_json
-        OpenSSL::OpenSSL
+        OpenSSL
         spdlog::spdlog
 )
 add_test(

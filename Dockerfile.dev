@@ -1,0 +1,83 @@
+FROM live_transport_network_monitor
+
+ARG APP_USER=admin
+
+# Install all required utils
+RUN apt-get update --fix-missing && \
+    DEBIAN_FRONTEND="noninteractive" apt-get install -y \
+    software-properties-common \
+    debhelper \
+    fakeroot \
+    curl \
+    gdb \
+    git \
+    python \
+    python-dev \
+    python3-pip \
+    devscripts \
+    sudo \
+    unzip \
+    wget \
+    vim \
+    zsh \
+    net-tools \
+    libtool \
+    libssl-dev \
+    libopenblas-dev \
+    liblapack-dev \
+    libdw-dev \
+    ninja-build \
+    nlohmann-json3-dev \
+    curl \
+    libcurl4-openssl-dev \
+    build-essential \
+    gcc \
+    g++ \
+    clang
+
+RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null && \
+    sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ bionic main'
+RUN apt-get update && \
+    DEBIAN_FRONTEND="noninteractive" apt-get install -y \
+    cmake 
+
+RUN pip3 install conan --upgrade
+RUN git clone https://github.com/conan-io/conan-center-index && \
+    cd conan-center-index/recipes/openssl/1.x.x && \
+    conan create . 1.1.1h@ && \
+    cd ../../boost/all && \
+    conan create . 1.74.0@ && \
+    cd ../../nlohmann_json/all && \
+    conan create . 3.9.1@ && \
+    cd ../../libcurl/all && \
+    conan install . 7.73.0@ 
+
+
+# ADD conanfile.py /home/${APP_USER}/live_transport_network_monitor/
+# ADD conanprofile.toml /home/${APP_USER}/live_transport_network_monitor/
+
+# Install all required dependencies
+# WORKDIR /home/${APP_USER}/live_transport_network_monitor/
+# RUN mkdir build && cd build && \
+#     conan profile update settings.compiler.libcxx=libstdc++11 default && \
+#     conan install boost/1.74.0 && \
+#         ("libcurl/7.73.0"),
+#         ("nlohmann_json/3.9.1"),
+#         ('openssl/1.1.1h'),
+#         ('spdlog/1.8.1'),
+
+# Install Boost
+RUN mkdir -p /home/${APP_USER}/libs/ && \
+    cd /home/${APP_USER}/libs/ && \
+    wget -O boost_1_74_0.tar.bz2 https://sourceforge.net/projects/boost/files/boost/1.74.0/boost_1_74_0.tar.bz2/download && \
+    tar xjf boost_1_74_0.tar.bz2 && \
+    cd boost_1_74_0 && \
+    ./bootstrap.sh && \
+    ./b2
+
+RUN ldconfig
+
+# Set env vars
+ENV BOOST_ROOT="/home/${APP_USER}/libs/c++/boost_1_74_0"
+
+WORKDIR /home/${APP_USER}/live_transport_network_monitor
