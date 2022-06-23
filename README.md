@@ -62,7 +62,6 @@ The `network-events` data feed follows the `STOMP 1.2 protocol` and is served ov
 **Underground network layout**
 The London Underground networl layout is described by a static JSON file listing all lines and stations.
 
-// table with documentation 
 
 **Events**
 
